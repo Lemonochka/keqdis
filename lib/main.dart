@@ -13,7 +13,7 @@ import 'autostart_service.dart';
 import 'improved_theme_manager.dart';
 import 'improved_subscription_service.dart';
 import 'single_instance_manager.dart';
-import 'main_ui.dart';
+import 'screens/main_ui.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

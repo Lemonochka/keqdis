@@ -75,6 +75,8 @@ flutter:
     - assets/bin/geoip.dat
     - assets/bin/geosite.dat
     - assets/icons/tray_icon.ico
+    - assets/bin/wintun.dll
+    - assets/bin/sing-box.exe
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

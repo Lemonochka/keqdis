@@ -394,6 +394,38 @@ class ThemeManager extends ChangeNotifier {
     await saveTheme();
   }
 
+  /// НОВЫЕ МЕТОДЫ ДЛЯ СОВМЕСТИМОСТИ С НАСТРОЙКАМИ
+
+  /// Установить путь к фоновому изображению
+  Future<void> setBackground(String? path) async {
+    _settings.backgroundImagePath = path;
+    await saveTheme();
+  }
+
+  /// Установить прозрачность фона
+  Future<void> setBackgroundOpacity(double opacity) async {
+    _settings.backgroundOpacity = opacity.clamp(0.0, 1.0);
+    await saveTheme();
+  }
+
+  /// Установить интенсивность размытия
+  Future<void> setBlurIntensity(double intensity) async {
+    _settings.blurIntensity = intensity.clamp(0.0, 20.0);
+    await saveTheme();
+  }
+
+  /// Установить основной цвет
+  Future<void> setPrimaryColor(Color color) async {
+    _settings.primaryColor = color;
+    await saveTheme();
+  }
+
+  /// Установить акцентный цвет
+  Future<void> setAccentColor(Color color) async {
+    _settings.accentColor = color;
+    await saveTheme();
+  }
+
   @override
   void dispose() {
     super.dispose();

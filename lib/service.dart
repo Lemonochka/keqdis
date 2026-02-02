@@ -10,172 +10,165 @@ class VpnService {
 
   bool get isRunning => _isRunning;
 
-  // Список необходимых файлов
-  final List<String> _requiredFiles = ['xray.exe', 'geoip.dat', 'geosite.dat'];
+  // ОБНОВЛЕНО: Добавлены sing-box.exe и wintun.dll
+  final List<String> _requiredFiles = [
+    'xray.exe',
+    'sing-box.exe',
+    'wintun.dll',
+    'geoip.dat',
+    'geosite.dat'
+  ];
 
   /// БЕЗОПАСНОСТЬ: Валидация имени процесса
-  static bool _isValidProcessName(String processName) {
-    // Разрешаем только конкретное имя процесса
-    return processName == 'xray.exe';
+  bool _isValidExecutable(String exeName) {
+    // Разрешаем только наши бинарники
+    return exeName == 'xray.exe' || exeName == 'sing-box.exe';
   }
 
-  /// БЕЗОПАСНОСТЬ: Безопасное завершение процесса
-  Future<void> _killAllXray() async {
-    const processName = 'xray.exe';
-
-    // БЕЗОПАСНОСТЬ: Валидация имени процесса
-    if (!_isValidProcessName(processName)) {
-      throw ArgumentError('Недопустимое имя процесса');
+  /// БЕЗОПАСНОСТЬ: Завершение конкретного типа процессов перед запуском
+  Future<void> _killExistingProcess(String exeName) async {
+    if (!_isValidExecutable(exeName)) {
+      throw ArgumentError('Недопустимое имя процесса для очистки: $exeName');
     }
 
     try {
-      // БЕЗОПАСНОСТЬ: Используем фиксированные аргументы без пользовательского ввода
-      await Process.run('taskkill', ['/F', '/IM', processName]);
+      // Убиваем только процессы с таким же именем (чтобы xray не убил sing-box)
+      if (Platform.isWindows) {
+        await Process.run('taskkill', ['/F', '/IM', exeName]);
+      }
     } catch (e) {
-      // Игнорируем ошибки - процесс может не быть запущен
+      // Игнорируем, если процесс не был запущен
     }
   }
 
-  Future<String> _prepareAssets() async {
+  Future<void> _prepareAssets() async {
     final dir = await getApplicationSupportDirectory();
-
-    // БЕЗОПАСНОСТЬ: Валидация пути директории
     final canonicalDir = path.canonicalize(dir.path);
 
     for (var fileName in _requiredFiles) {
-      // БЕЗОПАСНОСТЬ: Валидация имени файла
       if (!_isValidFileName(fileName)) {
         throw SecurityException('Недопустимое имя файла: $fileName');
       }
 
       final filePath = path.join(dir.path, fileName);
-
-      // БЕЗОПАСНОСТЬ: Проверка, что файл находится в разрешенной директории
       final canonicalFile = path.canonicalize(filePath);
+
       if (!canonicalFile.startsWith(canonicalDir)) {
         throw SecurityException('Попытка path traversal: $fileName');
       }
 
       final file = File(filePath);
 
-      // Распаковываем, если файла нет
       if (!await file.exists()) {
         try {
-          // Загружаем из assets/bin/...
+          // Пытаемся загрузить. Если файла нет в assets (например wintun),
+          // приложение может упасть, поэтому оборачиваем в try
           final data = await rootBundle.load('assets/bin/$fileName');
           final bytes = data.buffer.asUint8List();
 
-          // БЕЗОПАСНОСТЬ: Проверка размера файла (защита от DoS)
-          if (bytes.length > 100 * 1024 * 1024) { // 100 MB максимум
+          if (bytes.length > 100 * 1024 * 1024) {
             throw Exception('Файл $fileName слишком большой');
           }
 
           await file.writeAsBytes(bytes, flush: true);
 
-          // БЕЗОПАСНОСТЬ: Установка прав доступа только для владельца (только Windows)
-          if (Platform.isWindows) {
-            // На Windows права устанавливаются через NTFS ACL
-            // Для .exe файлов устанавливаем дополнительную защиту
-            if (fileName.endsWith('.exe')) {
-              try {
-                // Удаляем права для всех, кроме текущего пользователя
-                await Process.run('icacls', [
-                  filePath,
-                  '/inheritance:r',
-                  '/grant:r',
-                  '${Platform.environment['USERNAME']}:RX'
-                ]);
-              } catch (e) {
-                print('Предупреждение: не удалось установить ACL для $fileName: $e');
-              }
+          if (Platform.isWindows && fileName.endsWith('.exe')) {
+            try {
+              await Process.run('icacls', [
+                filePath,
+                '/inheritance:r',
+                '/grant:r',
+                '${Platform.environment['USERNAME']}:RX'
+              ]);
+            } catch (e) {
+              print('Warning ACL: $e');
             }
           }
-
-          print("Распакован файл: $fileName");
+          print("📦 Распакован: $fileName");
         } catch (e) {
-          print("Ошибка распаковки $fileName: $e");
-          // Если это dat файлы, пробуем жить без них, но предупреждаем
-          if (fileName.endsWith('.exe')) throw e;
+          // Если wintun.dll или dat файлы не найдены в ассетах — не критично,
+          // но exe файлы обязаны быть.
+          if (fileName.endsWith('.exe')) {
+            print("❌ Ошибка распаковки критического файла $fileName: $e");
+            throw e;
+          } else {
+            print("⚠️ Пропущен файл $fileName (не найден в assets): $e");
+          }
         }
       }
     }
-
-    return path.join(dir.path, 'xray.exe');
   }
 
-  /// БЕЗОПАСНОСТЬ: Валидация имени файла
   bool _isValidFileName(String fileName) {
-    // Запрещаем path traversal
     if (fileName.contains('..') || fileName.contains('/') || fileName.contains('\\')) {
       return false;
     }
-
-    // Разрешаем только конкретные файлы
     return _requiredFiles.contains(fileName);
   }
 
-  Future<void> start(String configJson) async {
+  /// Получить директорию с бинарниками (нужно для wintun.dll)
+  Future<String> getXrayDir() async {
+    final dir = await getApplicationSupportDirectory();
+    return dir.path;
+  }
+
+  /// ОБНОВЛЕНО: Теперь принимает имя файла и аргументы
+  Future<void> start(
+      String configJson, {
+        String executableName = 'xray.exe',
+        List<String>? args,
+      }) async {
     if (_isRunning) return;
 
-    await _killAllXray();
+    // Проверка безопасности имени файла
+    if (!_isValidExecutable(executableName)) {
+      throw SecurityException('Попытка запуска запрещенного файла: $executableName');
+    }
+
+    // Чистим старые процессы именно этого типа
+    await _killExistingProcess(executableName);
 
     final dir = await getApplicationSupportDirectory();
     final configPath = path.join(dir.path, 'config.json');
 
-    // БЕЗОПАСНОСТЬ: Валидация JSON конфига
     try {
-      json.decode(configJson); // Проверяем, что это валидный JSON
+      json.decode(configJson);
     } catch (e) {
       throw ArgumentError('Некорректный JSON конфиг: $e');
-    }
-
-    // БЕЗОПАСНОСТЬ: Ограничение размера конфига
-    if (configJson.length > 1024 * 1024) { // 1 MB максимум
-      throw ArgumentError('Конфиг слишком большой');
     }
 
     final configFile = File(configPath);
     await configFile.writeAsString(configJson);
 
-    // БЕЗОПАСНОСТЬ: Установка прав доступа только для владельца
-    if (Platform.isWindows) {
-      try {
-        await Process.run('icacls', [
-          configPath,
-          '/inheritance:r',
-          '/grant:r',
-          '${Platform.environment['USERNAME']}:RW'
-        ]);
-      } catch (e) {
-        print('Предупреждение: не удалось установить ACL для config.json: $e');
-      }
-    }
+    // Распаковываем всё необходимое (xray, sing-box, wintun)
+    await _prepareAssets();
 
-    // Подготовка файлов (exe + dat)
-    final exePath = await _prepareAssets();
+    final exePath = path.join(dir.path, executableName);
 
-    // БЕЗОПАСНОСТЬ: Проверка существования исполняемого файла
     if (!await File(exePath).exists()) {
-      throw Exception('Исполняемый файл Xray не найден');
+      throw Exception('Исполняемый файл $executableName не найден в ${dir.path}');
     }
 
     try {
-      // БЕЗОПАСНОСТЬ: Валидация аргументов командной строки
-      final args = ['run', '-c', configPath];
+      // Формируем аргументы.
+      // Если args не переданы, используем дефолт для Xray (run -c config)
+      // Для Sing-box мы будем передавать args явно из CoreManager
+      final runArgs = args ?? ['run', '-c', configPath];
 
-      // Проверяем, что пути не содержат опасных символов
-      for (final arg in args) {
-        if (arg.contains(';') || arg.contains('&') || arg.contains('|')) {
+      // Валидация аргументов
+      for (final arg in runArgs) {
+        if (arg.contains('&') || arg.contains('|')) {
           throw SecurityException('Недопустимые символы в аргументах');
         }
       }
 
+      print('🚀 Запуск $executableName с аргументами: $runArgs');
+
       _process = await Process.start(
         exePath,
-        args,
+        runArgs,
         runInShell: false,
         workingDirectory: dir.path,
-        // БЕЗОПАСНОСТЬ: Ограничиваем переменные окружения
         environment: {
           'PATH': Platform.environment['PATH'] ?? '',
         },
@@ -183,30 +176,25 @@ class VpnService {
 
       _isRunning = true;
 
+      // Логирование
       _process?.stdout.transform(utf8.decoder).listen((log) {
-        // БЕЗОПАСНОСТЬ: Не логируем полные сообщения (могут содержать чувствительные данные)
-        if (log.length > 200) {
-          print("XRAY: [сообщение обрезано, длина ${log.length}]");
+        // Убрали сильное ограничение длины для отладки, но оставили разумное
+        if (log.length > 500) {
+          print("[$executableName]: ${log.substring(0, 500)}...");
         } else {
-          print("XRAY: $log");
+          print("[$executableName]: ${log.trim()}");
         }
       });
 
       _process?.stderr.transform(utf8.decoder).listen((err) {
-        // БЕЗОПАСНОСТЬ: Не логируем полные сообщения об ошибках
-        if (err.length > 200) {
-          print("XRAY ERR: [ошибка обрезана, длина ${err.length}]");
-        } else {
-          print("XRAY ERR: $err");
-        }
-
-        if (err.contains('Failed') || err.contains('panic')) {
+        print("[$executableName ERR]: $err");
+        if (err.contains('Failed') || err.contains('panic') || err.contains('FATAL')) {
           _isRunning = false;
         }
       });
 
       _process?.exitCode.then((code) {
-        print("Xray завершился с кодом: $code");
+        print("$executableName завершился с кодом: $code");
         _isRunning = false;
         _process = null;
       });
@@ -219,7 +207,8 @@ class VpnService {
   }
 
   Future<void> stop() async {
-    await _killAllXray();
+    // Мягкая остановка текущего процесса инстанса
+    _process?.kill();
     _process = null;
     _isRunning = false;
   }
@@ -228,7 +217,6 @@ class VpnService {
 class SecurityException implements Exception {
   final String message;
   SecurityException(this.message);
-
   @override
   String toString() => 'SecurityException: $message';
 }
