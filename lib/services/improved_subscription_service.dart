@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'unified_storage.dart';
+import '../storages/unified_storage.dart';
 
 class UpdateResult {
   final bool success;
@@ -48,12 +48,12 @@ class SubscriptionService {
 
       // Блокируем локальные сети
       final ipPatterns = [
-        RegExp(r'^10\.'),          // 10.0.0.0/8
-        RegExp(r'^172\.(1[6-9]|2[0-9]|3[01])\.'),  // 172.16.0.0/12
-        RegExp(r'^192\.168\.'),    // 192.168.0.0/16
-        RegExp(r'^169\.254\.'),    // 169.254.0.0/16 (link-local)
-        RegExp(r'^fc00:'),         // IPv6 unique local
-        RegExp(r'^fe80:'),         // IPv6 link-local
+        RegExp(r'^10\.'),
+        RegExp(r'^172\.(1[6-9]|2[0-9]|3[01])\.'),
+        RegExp(r'^192\.168\.'),
+        RegExp(r'^169\.254\.'),
+        RegExp(r'^fc00:'),
+        RegExp(r'^fe80:'),
       ];
 
       for (final pattern in ipPatterns) {
@@ -142,8 +142,6 @@ class SubscriptionService {
         throw SecurityException('Запрещенный URL: попытка доступа к локальным ресурсам');
       }
 
-      print('Загрузка подписки: $url');
-
       final response = await http.get(
         Uri.parse(url),
         headers: {
@@ -168,7 +166,6 @@ class SubscriptionService {
         throw Exception('В подписке не найдено серверов');
       }
 
-      print('Загружено ${servers.length} серверов');
       return servers;
 
     } on SocketException catch (e) {
@@ -180,7 +177,6 @@ class SubscriptionService {
     } on SecurityException {
       rethrow;
     } catch (e) {
-      print('Ошибка загрузки подписки: $e');
       throw Exception('Не удалось загрузить подписку: ${e.toString()}');
     }
   }
@@ -197,10 +193,8 @@ class SubscriptionService {
         final trimmed = content.trim();
         final cleaned = trimmed.replaceAll(RegExp(r'\s'), '');
         decodedContent = utf8.decode(base64.decode(cleaned));
-        print('Подписка декодирована из base64');
       } catch (e) {
         decodedContent = content;
-        print('Подписка не в base64, используем как есть');
       }
 
       // Парсим строки
@@ -210,15 +204,12 @@ class SubscriptionService {
           .where((line) => line.isNotEmpty);
 
       for (final line in lines) {
-        // Поддерживаемые протоколы
         if (_isValidServerConfig(line)) {
           servers.add(line);
         }
       }
 
-      print('Распарсено ${servers.length} конфигов серверов');
     } catch (e) {
-      print('Ошибка парсинга подписки: $e');
       throw Exception('Не удалось распарсить подписку');
     }
 
@@ -239,8 +230,6 @@ class SubscriptionService {
       Subscription subscription,
       ) async {
     try {
-      print('Обновление подписки: ${subscription.name}');
-
       // Скачиваем новые серверы
       final newServers = await fetchServersFromSubscription(subscription.url);
 
@@ -259,8 +248,6 @@ class SubscriptionService {
 
       await updateSubscription(updatedSubscription);
 
-      print('Подписка ${subscription.name} обновлена: ${newServers.length} серверов');
-
       return UpdateResult(
         success: true,
         serverCount: newServers.length,
@@ -268,8 +255,6 @@ class SubscriptionService {
       );
 
     } catch (e) {
-      print('Ошибка обновления подписки ${subscription.name}: $e');
-
       return UpdateResult(
         success: false,
         error: e.toString(),
@@ -285,10 +270,7 @@ class SubscriptionService {
 
     for (final subscription in subscriptions) {
       if (subscription.autoUpdate) {
-        print('Обновление подписки: ${subscription.name}');
         results.add(await updateSubscriptionServers(subscription));
-
-        // Небольшая задержка между запросами
         await Future.delayed(const Duration(milliseconds: 500));
       }
     }

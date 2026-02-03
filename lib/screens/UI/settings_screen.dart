@@ -3,9 +3,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../improved_theme_manager.dart';
-import '../improved_settings_storage.dart';
-import '../autostart_service.dart';
-import '../custom_notification.dart';
+import '../../storages/improved_settings_storage.dart';
+import '../../services/autostart_service.dart';
+import 'custom_notification.dart';
 import 'improved_routing_settings.dart';
 
 class SettingsView extends StatefulWidget {

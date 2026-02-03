@@ -16,24 +16,16 @@ class TrayService with TrayListener {
     required Function() onToggleCallback,
     required Function() onExitCallback,
   }) async {
-    if (_isInitialized) {
-      print('Трей уже инициализирован');
-      return;
-    }
+    if (_isInitialized) return;
 
-    print('Инициализация трея...');
     onShow = onShowCallback;
     onToggleConnection = onToggleCallback;
     onExit = onExitCallback;
 
-    await trayManager.setIcon(
-      'assets/icons/tray_icon.ico',
-    );
-
+    await trayManager.setIcon('assets/icons/tray_icon.ico');
     await _updateMenu(isConnected: false);
     trayManager.addListener(this);
     _isInitialized = true;
-    print('Трей инициализирован успешно');
   }
 
   Future<void> updateConnectionStatus(bool isConnected) async {
@@ -60,8 +52,6 @@ class TrayService with TrayListener {
       ],
     );
     await trayManager.setContextMenu(menu);
-
-    // Обновляем tooltip
     await trayManager.setToolTip(
         isConnected ? 'KEQDIS - Подключено' : 'KEQDIS - Отключено'
     );
@@ -69,19 +59,16 @@ class TrayService with TrayListener {
 
   @override
   void onTrayIconMouseDown() {
-    print('Клик по иконке трея');
     onShow?.call();
   }
 
   @override
   void onTrayIconRightMouseDown() {
-    print('ПКМ по иконке трея');
     trayManager.popUpContextMenu();
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    print('Клик по меню трея: ${menuItem.key}');
     switch (menuItem.key) {
       case 'show':
         onShow?.call();
@@ -96,10 +83,8 @@ class TrayService with TrayListener {
   }
 
   Future<void> dispose() async {
-    print('Disposing трея...');
     trayManager.removeListener(this);
     await trayManager.destroy();
     _isInitialized = false;
-    print('Трей уничтожен');
   }
 }

@@ -25,9 +25,8 @@ class TunService {
       final data = await rootBundle.load('assets/bin/$_wintunDllName');
       final bytes = data.buffer.asUint8List();
       await dllFile.writeAsBytes(bytes, flush: true);
-      print('✅ wintun.dll скопирован');
     } catch (e) {
-      print('❌ Ошибка копирования wintun.dll: $e');
+      // Failed to prepare wintun.dll
     }
   }
 
@@ -40,14 +39,13 @@ class TunService {
     }
   }
 
-  /// TUN конфиг
   static Map<String, dynamic> createTunInbound() {
     return <String, dynamic>{
       "tag": "tun-in",
       "protocol": "tun",
       "settings": <String, dynamic>{
         "name": "keqdis-tun",
-        "mtu": 1280, // Уменьшили MTU для стабильности
+        "mtu": 1280,
         "address": ["172.19.0.1/30"],
         "autoRoute": true,
         "strictRoute": true,
@@ -60,11 +58,8 @@ class TunService {
     };
   }
 
-  /// ПОЛУЧАЕМ ЛОКАЛЬНЫЙ IP АДРЕС АКТИВНОГО АДАПТЕРА
-  /// Это намного надежнее для Windows, чем имя интерфейса
   static Future<String> getActiveInterfaceIp() async {
     try {
-      // PowerShell: Найти активный адаптер и взять его IPv4 адрес
       const psCommand = r'Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Virtual -eq $false -and $_.InterfaceDescription -notlike "*TAP*" -and $_.InterfaceDescription -notlike "*Hyper-V*" } | Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress -First 1';
 
       final result = await Process.run(
@@ -75,21 +70,16 @@ class TunService {
 
       final ip = result.stdout.toString().trim();
 
-      // Простейшая валидация IP
       if (ip.isNotEmpty && ip.split('.').length == 4) {
-        print('✅ (PowerShell) Найден IP интерфейса: "$ip"');
         return ip;
       }
 
-      print('⚠️ Не удалось определить IP, возвращаем пустоту');
       return '';
     } catch (e) {
-      print('⚠️ Ошибка получения IP: $e');
       return '';
     }
   }
 
-  // Заглушки
   static Future<bool> addTunRoute() async => true;
   static Future<void> removeTunRoute() async {}
   static Future<bool> requestAdminRights() async {
@@ -98,6 +88,8 @@ class TunService {
     try {
       await Process.run('powershell', ['Start-Process', '"$exe"', '-Verb', 'RunAs']);
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    }
   }
 }

@@ -4,19 +4,19 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
-import '../core_manager.dart';
-import '../unified_storage.dart';
-import '../improved_settings_storage.dart';
-import '../system_proxy.dart';
-import '../config_validator.dart';
-import '../tray_service.dart';
-import '../autostart_service.dart';
+import '../../core/core_manager.dart';
+import '../../storages/unified_storage.dart';
+import '../../storages/improved_settings_storage.dart';
+import '../../core/system_proxy.dart';
+import '../../utils/config_validator.dart';
+import '../../services/tray_service.dart';
+import '../../services/autostart_service.dart';
 import '../improved_theme_manager.dart';
-import '../ping_service.dart';
-import '../improved_subscription_service.dart';
-import '../custom_notification.dart';
-import '../single_instance_manager.dart';
-import '../tun_service.dart';
+import '../../services/ping_service.dart';
+import '../../services/improved_subscription_service.dart';
+import 'custom_notification.dart';
+import '../../utils/single_instance_manager.dart';
+import '../../core/tun_service.dart';
 import 'package:country_flags/country_flags.dart';
 import 'subscriptions_screen.dart';
 import 'settings_screen.dart';
@@ -107,7 +107,6 @@ class _MainShellState extends State<MainShell>
       // Шаг 5: ВАЖНО - автоподключение только после загрузки данных
       await _autoConnectToLastServer();
     } catch (e) {
-      print('❌ Ошибка инициализации: $e');
     }
   }
 
@@ -116,13 +115,11 @@ class _MainShellState extends State<MainShell>
     final available = await TunService.isTunAvailable();
     if (mounted) {
       setState(() => _tunAvailable = available);
-      print('🔍 TUN доступен: $_tunAvailable');
     }
   }
 
   @override
   void dispose() {
-    print('🧹 Cleanup начат...');
 
     // КРИТИЧНО: Освобождаем ресурсы
     windowManager.removeListener(this);
@@ -136,7 +133,6 @@ class _MainShellState extends State<MainShell>
     // Освобождаем single instance lock
     SingleInstanceManager.release();
 
-    print('🧹 Cleanup завершён');
     super.dispose();
   }
 
@@ -147,7 +143,6 @@ class _MainShellState extends State<MainShell>
       // Удаляем результаты старше 10 минут
       return true; // Упрощённая версия, можно добавить timestamp
     });
-    print('🧹 Очищен кэш пингов: ${_pingResults.length} записей осталось');
   }
 
   // ========== LIFECYCLE ==========
@@ -161,7 +156,6 @@ class _MainShellState extends State<MainShell>
     }
 
     // Реальный выход
-    print('🚪 Выход из приложения...');
     await SystemProxy.clearProxy();
     await _coreManager.stop();
     await _trayService.dispose();
@@ -235,7 +229,6 @@ class _MainShellState extends State<MainShell>
         await AutoStartService.toggle(_settings.autoStart);
       }
     } catch (e) {
-      print('Ошибка загрузки данных: $e');
     }
   }
 
@@ -264,12 +257,10 @@ class _MainShellState extends State<MainShell>
         );
 
         if (dueSubscriptions.isNotEmpty) {
-          print('Автообновление ${dueSubscriptions.length} подписок');
           await SubscriptionService.updateAllSubscriptions();
           _loadData();
         }
       } catch (e) {
-        print('Ошибка автообновления: $e');
       }
     });
   }
@@ -286,11 +277,35 @@ class _MainShellState extends State<MainShell>
 
       _loadData();
     } catch (e) {
-      print('Ошибка обновления при старте: $e');
     }
   }
 
   // ========== АВТОПОДКЛЮЧЕНИЕ ==========
+
+  /// Сохранить последний использованный режим VPN
+  Future<void> _saveVpnMode(VpnMode mode) async {
+    try {
+      final modeString = mode == VpnMode.tun ? 'tun' : 'systemProxy';
+      final updatedSettings = AppSettings(
+        localPort: _settings.localPort,
+        directDomains: _settings.directDomains,
+        blockedDomains: _settings.blockedDomains,
+        directIps: _settings.directIps,
+        proxyDomains: _settings.proxyDomains,
+        pingType: _settings.pingType,
+        autoStart: _settings.autoStart,
+        minimizeToTray: _settings.minimizeToTray,
+        startMinimized: _settings.startMinimized,
+        autoConnectLastServer: _settings.autoConnectLastServer,
+        lastVpnMode: modeString,
+      );
+
+      await SettingsStorage.saveSettings(updatedSettings);
+      _settings = updatedSettings;
+    } catch (e) {
+    }
+  }
+
   Future<void> _autoConnectToLastServer() async {
     try {
       // Если настройки еще не загружены (на всякий случай) или функция выключена
@@ -306,13 +321,23 @@ class _MainShellState extends State<MainShell>
       final index = _servers.indexWhere((s) => s.id == lastServer.id);
       if (index == -1) return;
 
+      // Восстанавливаем последний использованный режим VPN
+      final lastMode = _settings.lastVpnMode;
+      final vpnMode = lastMode == 'tun' ? VpnMode.tun : VpnMode.systemProxy;
+
+      // Если это TUN и нет прав админа - переключаемся на системный прокси
+      if (vpnMode == VpnMode.tun && !_tunAvailable) {
+        _vpnMode = VpnMode.systemProxy;
+      } else {
+        _vpnMode = vpnMode;
+      }
+
       if (mounted) {
         setState(() => _selectedServerIndex = index);
         // Можно сразу вызывать подключение
         _toggleVpn();
       }
     } catch (e) {
-      print('Ошибка автоподключения: $e');
     }
   }
 
@@ -442,6 +467,9 @@ class _MainShellState extends State<MainShell>
         );
 
         await UnifiedStorage.saveLastServer(selectedServer.id);
+
+        // Сохраняем последний использованный режим VPN
+        await _saveVpnMode(_vpnMode);
 
         if (mounted) setState(() {
           _isConnected = true;
@@ -1256,6 +1284,9 @@ class _MainShellState extends State<MainShell>
           _status = "Подключено";
         });
 
+        // Сохраняем последний использованный режим
+        await _saveVpnMode(newMode);
+
         CustomNotification.show(
           context,
           message: 'Режим изменен: ${newMode == VpnMode.tun ? "TUN" : "System Proxy"}',
@@ -1277,6 +1308,9 @@ class _MainShellState extends State<MainShell>
     } else {
       // Просто меняем режим для следующего подключения
       setState(() => _vpnMode = newMode);
+
+      // Сохраняем последний использованный режим
+      await _saveVpnMode(newMode);
 
       CustomNotification.show(
         context,

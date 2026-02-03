@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:file_picker/file_picker.dart';
-import 'unified_storage.dart';
+import '../storages/unified_storage.dart';
 
 class ThemeSettings {
   String? backgroundImagePath;
@@ -45,6 +45,7 @@ class ThemeSettings {
   }
 }
 
+/// ОПТИМИЗИРОВАНО: Минимальное количество notifyListeners, ленивая загрузка изображений
 class ThemeManager extends ChangeNotifier {
   static final ThemeManager _instance = ThemeManager._internal();
   factory ThemeManager() => _instance;
@@ -55,10 +56,8 @@ class ThemeManager extends ChangeNotifier {
 
   bool get hasCustomBackground => _settings.backgroundImagePath != null;
 
-  // БЕЗОПАСНОСТЬ: Максимальный размер изображения (10 MB)
   static const int _maxImageSize = 10 * 1024 * 1024;
 
-  /// БЕЗОПАСНОСТЬ: Валидация типа файла
   static bool _isValidImageExtension(String path) {
     final extension = path.toLowerCase().split('.').last;
     const validExtensions = {'jpg', 'jpeg', 'png', 'webp', 'bmp'};
@@ -80,16 +79,13 @@ class ThemeManager extends ChangeNotifier {
 
       final newSettings = ThemeSettings.fromJson(decoded);
 
-      // Проверяем существование файла фона
       if (newSettings.backgroundImagePath != null) {
         final bgFile = File(newSettings.backgroundImagePath!);
         if (!await bgFile.exists()) {
           newSettings.backgroundImagePath = null;
         } else {
-          // БЕЗОПАСНОСТЬ: Проверка размера существующего файла
           final fileSize = await bgFile.length();
           if (fileSize > _maxImageSize) {
-            print('Предупреждение: файл фона слишком большой, удаляем');
             await bgFile.delete();
             newSettings.backgroundImagePath = null;
           }
@@ -99,7 +95,7 @@ class ThemeManager extends ChangeNotifier {
       _settings = newSettings;
       notifyListeners();
     } catch (e) {
-      print('Ошибка загрузки темы: $e');
+      // Игнорируем ошибки
     }
   }
 
@@ -112,11 +108,11 @@ class ThemeManager extends ChangeNotifier {
       await file.writeAsString(themeJson);
       notifyListeners();
     } catch (e) {
-      print('Ошибка сохранения темы: $e');
+      // Игнорируем ошибки
     }
   }
 
-  /// ИСПРАВЛЕНО: Выбрать фоновое изображение с проверкой безопасности
+  /// Выбрать фоновое изображение с проверкой безопасности
   Future<void> pickBackgroundImage() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -128,23 +124,19 @@ class ThemeManager extends ChangeNotifier {
         final sourcePath = result.files.single.path!;
         final sourceFile = File(sourcePath);
 
-        // БЕЗОПАСНОСТЬ: Проверка существования файла
         if (!await sourceFile.exists()) {
           throw Exception('Файл не найден');
         }
 
-        // БЕЗОПАСНОСТЬ: Проверка типа файла
         if (!_isValidImageExtension(sourcePath)) {
           throw Exception('Недопустимый формат изображения. Разрешены: JPG, PNG, WEBP, BMP');
         }
 
-        // БЕЗОПАСНОСТЬ: Проверка размера файла
         final fileSize = await sourceFile.length();
         if (fileSize > _maxImageSize) {
           throw Exception('Файл слишком большой. Максимальный размер: ${_maxImageSize ~/ (1024 * 1024)} MB');
         }
 
-        // БЕЗОПАСНОСТЬ: Проверка, что это действительно изображение
         try {
           final bytes = await sourceFile.readAsBytes();
           await ui.instantiateImageCodec(bytes, targetWidth: 10, targetHeight: 10);
@@ -167,14 +159,13 @@ class ThemeManager extends ChangeNotifier {
               await oldFile.delete();
             }
           } catch (e) {
-            print('Ошибка удаления старого фона: $e');
+            // Игнорируем ошибки
           }
         }
 
         // Копируем новое изображение
         await sourceFile.copy(destPath);
 
-        // БЕЗОПАСНОСТЬ: Устанавливаем права доступа
         if (Platform.isWindows) {
           try {
             await Process.run('icacls', [
@@ -184,7 +175,7 @@ class ThemeManager extends ChangeNotifier {
               '${Platform.environment['USERNAME']}:R'
             ]);
           } catch (e) {
-            print('Предупреждение: не удалось установить ACL: $e');
+            // Игнорируем ошибки
           }
         }
 
@@ -195,7 +186,6 @@ class ThemeManager extends ChangeNotifier {
         await saveTheme();
       }
     } catch (e) {
-      print('Ошибка выбора изображения: $e');
       rethrow;
     }
   }
@@ -208,75 +198,48 @@ class ThemeManager extends ChangeNotifier {
       final imageFile = File(imagePath);
       final imageBytes = await imageFile.readAsBytes();
 
-      // БЕЗОПАСНОСТЬ: Дополнительная проверка размера
       if (imageBytes.length > _maxImageSize) {
         throw Exception('Изображение слишком большое');
       }
 
-      // Сжимаем изображение перед анализом
+      // ОПТИМИЗАЦИЯ: Сильное сжатие для анализа
       final codec = await ui.instantiateImageCodec(
         imageBytes,
-        targetWidth: 200,
-        targetHeight: 200,
+        targetWidth: 100, // Уменьшено с 200
+        targetHeight: 100,
       );
 
       final frame = await codec.getNextFrame();
       image = frame.image;
 
-      // Уменьшаем maximumColorCount для производительности
+      // ОПТИМИЗАЦИЯ: Меньше цветов для анализа
       final paletteGenerator = await PaletteGenerator.fromImage(
         image,
-        maximumColorCount: 16,
+        maximumColorCount: 8, // Уменьшено с 16
       );
 
-      // Получаем цвета
       final vibrant = paletteGenerator.vibrantColor?.color;
       final darkVibrant = paletteGenerator.darkVibrantColor?.color;
       final lightVibrant = paletteGenerator.lightVibrantColor?.color;
-      final muted = paletteGenerator.mutedColor?.color;
-      final darkMuted = paletteGenerator.darkMutedColor?.color;
-      final lightMuted = paletteGenerator.lightMutedColor?.color;
       final dominant = paletteGenerator.dominantColor?.color;
 
-      // PRIMARY COLOR
-      _settings.primaryColor = vibrant ??
-          lightVibrant ??
-          dominant ??
-          muted ??
-          const Color(0xFF6C63FF);
+      _settings.primaryColor = vibrant ?? lightVibrant ?? dominant ?? const Color(0xFF6C63FF);
+      _settings.secondaryColor = lightVibrant ?? vibrant?.withOpacity(0.8) ?? const Color(0xFF00D9FF);
+      _settings.accentColor = darkVibrant ?? _darkenColor(dominant ?? _settings.primaryColor, 0.7) ?? const Color(0xFF1A1F3A);
 
-      // SECONDARY COLOR
-      _settings.secondaryColor = lightVibrant ??
-          vibrant?.withOpacity(0.8) ??
-          lightMuted ??
-          _brightenColor(_settings.primaryColor, 0.3) ??
-          const Color(0xFF00D9FF);
-
-      // ACCENT COLOR
-      _settings.accentColor = darkVibrant ??
-          darkMuted ??
-          _darkenColor(dominant ?? _settings.primaryColor, 0.7) ??
-          const Color(0xFF1A1F3A);
-
-      // Коррекция
       _settings.accentColor = _ensureContrast(_settings.accentColor);
       _settings.primaryColor = _ensureSaturation(_settings.primaryColor);
       _settings.secondaryColor = _ensureBrightness(_settings.secondaryColor);
 
     } catch (e) {
-      print('Ошибка извлечения цветов: $e');
-
-      // Используем цвета по умолчанию
       _settings.primaryColor = const Color(0xFF6C63FF);
       _settings.secondaryColor = const Color(0xFF00D9FF);
       _settings.accentColor = const Color(0xFF1A1F3A);
     } finally {
-      // Освобождаем ресурсы изображения
       image?.dispose();
     }
   }
 
-  /// Затемнить цвет
   Color? _darkenColor(Color color, double factor) {
     try {
       final hsl = HSLColor.fromColor(color);
@@ -287,52 +250,30 @@ class ThemeManager extends ChangeNotifier {
     }
   }
 
-  /// Осветлить цвет
-  Color? _brightenColor(Color color, double factor) {
-    try {
-      final hsl = HSLColor.fromColor(color);
-      final lightness = (hsl.lightness + (1.0 - hsl.lightness) * factor).clamp(0.0, 1.0);
-      final brightened = hsl.withLightness(lightness);
-      return brightened.toColor();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Обеспечить контрастность
   Color _ensureContrast(Color color) {
     final hsl = HSLColor.fromColor(color);
-
     if (hsl.lightness > 0.3) {
       return hsl.withLightness(0.15).toColor();
     }
-
     return color;
   }
 
-  /// Обеспечить насыщенность
   Color _ensureSaturation(Color color) {
     final hsl = HSLColor.fromColor(color);
-
     if (hsl.saturation < 0.5) {
       return hsl.withSaturation(0.7).toColor();
     }
-
     return color;
   }
 
-  /// Обеспечить яркость
   Color _ensureBrightness(Color color) {
     final hsl = HSLColor.fromColor(color);
-
     if (hsl.lightness < 0.5) {
       return hsl.withLightness(0.6).toColor();
     }
-
     return color;
   }
 
-  /// Удалить фоновое изображение
   Future<void> removeBackground() async {
     if (_settings.backgroundImagePath != null) {
       try {
@@ -341,12 +282,10 @@ class ThemeManager extends ChangeNotifier {
           await file.delete();
         }
       } catch (e) {
-        print('Ошибка удаления фона: $e');
+        // Игнорируем ошибки
       }
 
       _settings.backgroundImagePath = null;
-
-      // Возвращаем дефолтные цвета
       _settings.primaryColor = const Color(0xFF6C63FF);
       _settings.secondaryColor = const Color(0xFF00D9FF);
       _settings.accentColor = const Color(0xFF1A1F3A);
@@ -355,19 +294,15 @@ class ThemeManager extends ChangeNotifier {
     }
   }
 
-  /// Обновить прозрачность фона
+  // ОПТИМИЗАЦИЯ: Убрали отдельные notifyListeners - вызываем только в saveTheme
   void updateOpacity(double opacity) {
     _settings.backgroundOpacity = opacity.clamp(0.0, 1.0);
-    notifyListeners();
   }
 
-  /// Обновить размытие фона
   void updateBlur(double blur) {
     _settings.blurIntensity = blur.clamp(0.0, 20.0);
-    notifyListeners();
   }
 
-  /// Получить ThemeData для приложения
   ThemeData getThemeData() {
     return ThemeData.dark(useMaterial3: true).copyWith(
       scaffoldBackgroundColor: hasCustomBackground
@@ -381,7 +316,6 @@ class ThemeManager extends ChangeNotifier {
     );
   }
 
-  /// Установить пользовательские цвета
   Future<void> setCustomColors({
     Color? primary,
     Color? secondary,
@@ -390,37 +324,29 @@ class ThemeManager extends ChangeNotifier {
     if (primary != null) _settings.primaryColor = primary;
     if (secondary != null) _settings.secondaryColor = secondary;
     if (accent != null) _settings.accentColor = accent;
-
     await saveTheme();
   }
 
-  /// НОВЫЕ МЕТОДЫ ДЛЯ СОВМЕСТИМОСТИ С НАСТРОЙКАМИ
-
-  /// Установить путь к фоновому изображению
   Future<void> setBackground(String? path) async {
     _settings.backgroundImagePath = path;
     await saveTheme();
   }
 
-  /// Установить прозрачность фона
   Future<void> setBackgroundOpacity(double opacity) async {
     _settings.backgroundOpacity = opacity.clamp(0.0, 1.0);
     await saveTheme();
   }
 
-  /// Установить интенсивность размытия
   Future<void> setBlurIntensity(double intensity) async {
     _settings.blurIntensity = intensity.clamp(0.0, 20.0);
     await saveTheme();
   }
 
-  /// Установить основной цвет
   Future<void> setPrimaryColor(Color color) async {
     _settings.primaryColor = color;
     await saveTheme();
   }
 
-  /// Установить акцентный цвет
   Future<void> setAccentColor(Color color) async {
     _settings.accentColor = color;
     await saveTheme();

@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'improved_settings_storage.dart';
-import 'tun_service.dart';
+import '../storages/improved_settings_storage.dart';
+import '../core/tun_service.dart';
 
 class ConfigGeneratorV2 {
 
@@ -31,7 +31,6 @@ class ConfigGeneratorV2 {
       return (val != null && val.isNotEmpty) ? val.first : def;
     }
 
-    // --- OUTBOUND ---
     final outbound = <String, dynamic>{
       "protocol": "vless",
       "tag": "proxy",
@@ -52,13 +51,12 @@ class ConfigGeneratorV2 {
       }
     };
 
-    // TUN: SendThrough обязателен, чтобы не было петли
     if (mode == VpnMode.tun && adapterIp.isNotEmpty) {
       outbound['sendThrough'] = adapterIp;
       (outbound['streamSettings'] as Map)['sockopt'] = {"tcpFastOpen": true};
     }
 
-    // Transport Settings...
+    // Transport Settings
     final stream = outbound['streamSettings'] as Map<String, dynamic>;
     final type = stream['network'];
     final security = stream['security'];
@@ -81,7 +79,6 @@ class ConfigGeneratorV2 {
       };
     }
 
-    // ТРАНСПОРТЫ
     if (type == 'tcp' && getParam('headerType') == 'http') {
       stream['tcpSettings'] = {
         "header": {
@@ -106,7 +103,6 @@ class ConfigGeneratorV2 {
         "path": getParam('path', '/'),
       };
 
-      // КРИТИЧНО: host обязателен для xhttp! Если пустой - используем SNI
       final host = getParam('host');
       xhttpSettings['host'] = host.isNotEmpty ? host : sni;
 
@@ -124,7 +120,6 @@ class ConfigGeneratorV2 {
     }
 
 
-    // --- ПАРСИНГ ПОЛЬЗОВАТЕЛЬСКИХ НАСТРОЕК РОУТИНГА ---
     List<String> _parseList(String input) {
       return input
           .split(',')
@@ -133,13 +128,10 @@ class ConfigGeneratorV2 {
           .toList();
     }
 
-    // Нормализация доменов для Xray
     List<String> _normalizeDomains(List<String> domains) {
       return domains.map((domain) {
-        // Удаляем пробелы и спецсимволы
         final cleaned = domain.trim().toLowerCase();
 
-        // Если это уже с префиксом (domain:, full:, regexp:), оставляем как есть
         if (cleaned.startsWith('domain:') ||
             cleaned.startsWith('full:') ||
             cleaned.startsWith('regexp:') ||
@@ -147,17 +139,14 @@ class ConfigGeneratorV2 {
           return cleaned;
         }
 
-        // Если это TLD (например "ru", "com")
         if (!cleaned.contains('.')) {
           return 'regexp:.*\\.${cleaned}\$';
         }
 
-        // Если начинается с точки (например ".google.com")
         if (cleaned.startsWith('.')) {
           return 'domain:${cleaned.substring(1)}';
         }
 
-        // Обычный домен - используем domain: для поддоменов
         return 'domain:$cleaned';
       }).toList();
     }
@@ -167,17 +156,14 @@ class ConfigGeneratorV2 {
     final proxyDomains = _normalizeDomains(_parseList(settings.proxyDomains));
     final directIps = _parseList(settings.directIps);
 
-    // --- ROUTING RULES ---
     final rules = <Map<String, dynamic>>[];
 
-    // 1. Блокируем мусор
     rules.add({
       "type": "field",
       "ip": ["169.254.0.0/16", "224.0.0.0/4", "255.255.255.255/32"],
       "outboundTag": "block"
     });
 
-    // 2. Заблокированные домены из настроек -> Block
     if (blockedDomains.isNotEmpty) {
       rules.add({
         "type": "field",
@@ -186,7 +172,6 @@ class ConfigGeneratorV2 {
       });
     }
 
-    // 3. Сервер VPN -> Direct (ТОЛЬКО для системного прокси)
     if (mode == VpnMode.systemProxy) {
       final isIpAddress = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(address);
       if (isIpAddress) {
@@ -203,9 +188,7 @@ class ConfigGeneratorV2 {
         });
       }
     }
-    // Для TUN режима сервер уже исключен в Sing-box
 
-    // 4. Direct домены из настроек -> Direct
     if (directDomains.isNotEmpty) {
       rules.add({
         "type": "field",
@@ -214,7 +197,6 @@ class ConfigGeneratorV2 {
       });
     }
 
-    // 5. Direct IPs из настроек -> Direct
     if (directIps.isNotEmpty) {
       rules.add({
         "type": "field",
@@ -223,14 +205,12 @@ class ConfigGeneratorV2 {
       });
     }
 
-    // 6. Локалка -> Direct
     rules.add({
       "type": "field",
       "ip": ["geoip:private"],
       "outboundTag": "direct"
     });
 
-    // 7. DNS запросы -> DNS resolver (только для системного прокси)
     if (mode == VpnMode.systemProxy) {
       rules.add({
         "type": "field",
@@ -240,7 +220,6 @@ class ConfigGeneratorV2 {
       });
     }
 
-    // 8. Proxy домены из настроек -> Proxy (принудительно через VPN)
     if (proxyDomains.isNotEmpty) {
       rules.add({
         "type": "field",
@@ -249,7 +228,6 @@ class ConfigGeneratorV2 {
       });
     }
 
-    // 9. Всё остальное -> Proxy
     rules.add({
       "type": "field",
       "outboundTag": "proxy",
@@ -266,12 +244,11 @@ class ConfigGeneratorV2 {
         <String, dynamic>{"protocol": "blackhole", "tag": "block"}
       ],
       "routing": {
-        "domainStrategy": "AsIs", // КРИТИЧНО для TUN! Не резолвим домены в Xray
+        "domainStrategy": "AsIs",
         "rules": rules
       }
     };
 
-    // DNS и FakeDNS ТОЛЬКО для системного прокси
     if (mode == VpnMode.systemProxy) {
       config["dns"] = {
         "servers": ["fakedns", "8.8.8.8", "1.1.1.1"],
@@ -282,9 +259,8 @@ class ConfigGeneratorV2 {
       config["outbounds"].add(<String, dynamic>{"protocol": "dns", "tag": "dns-out"});
     }
 
-    // --- INBOUNDS (ЗАВИСИТ ОТ РЕЖИМА) ---
+
     if (mode == VpnMode.tun) {
-      // ДЛЯ TUN РЕЖИМА: Xray работает как SOCKS5 прокси для Sing-box
       config['inbounds'].add({
         "tag": "socks-in",
         "port": settings.localPort,
@@ -292,7 +268,7 @@ class ConfigGeneratorV2 {
         "protocol": "socks",
         "settings": {
           "auth": "noauth",
-          "udp": true,  // КРИТИЧНО! UDP для Discord и игр
+          "udp": true,
           "ip": "127.0.0.1"
         },
         "sniffing": {
@@ -301,7 +277,6 @@ class ConfigGeneratorV2 {
         }
       });
     } else {
-      // ДЛЯ SYSTEM PROXY РЕЖИМА: Xray работает как MIXED прокси для приложений
       config['inbounds'].add({
         "tag": "mixed-in",
         "port": settings.localPort,
@@ -309,7 +284,7 @@ class ConfigGeneratorV2 {
         "protocol": "mixed",
         "settings": {
           "allowTransparent": false,
-          "udpEnabled": true  // КРИТИЧНО! UDP для Discord и игр
+          "udpEnabled": true
         },
         "sniffing": {
           "enabled": true,
@@ -322,15 +297,12 @@ class ConfigGeneratorV2 {
   }
 }
 
-/// Генератор конфига для Sing-box (только для поднятия TUN)
-/// ФИНАЛЬНАЯ ВЕРСИЯ с правильным DNS routing
 class SingBoxChainGen {
   static String generateTunConfig({
     required int localSocksPort,
     required String serverIpToExclude,
-    required AppSettings settings, // ДОБАВИЛИ настройки!
+    required AppSettings settings,
   }) {
-    // Парсим пользовательские настройки
     List<String> _parseList(String input) {
       return input
           .split(',')
@@ -339,12 +311,10 @@ class SingBoxChainGen {
           .toList();
     }
 
-    // Нормализация доменов для Sing-box
     List<String> _normalizeDomains(List<String> domains) {
       return domains.map((domain) {
         final cleaned = domain.trim().toLowerCase();
 
-        // Удаляем точку в начале если есть
         if (cleaned.startsWith('.')) {
           return cleaned.substring(1);
         }
@@ -361,13 +331,11 @@ class SingBoxChainGen {
     // --- ROUTING RULES ---
     final rules = <Map<String, dynamic>>[];
 
-    // 1. DNS hijacking
     rules.add({
       "protocol": ["dns"],
       "action": "hijack-dns"
     });
 
-    // 2. Заблокированные домены -> Block
     if (blockedDomains.isNotEmpty) {
       rules.add({
         "domain": blockedDomains,
@@ -375,7 +343,6 @@ class SingBoxChainGen {
       });
     }
 
-    // 3. IP сервера VPN -> Direct (критично для работы TUN!)
     if (serverIpToExclude.isNotEmpty) {
       rules.add({
         "ip_cidr": [serverIpToExclude],
@@ -383,15 +350,13 @@ class SingBoxChainGen {
       });
     }
 
-    // 4. Direct домены из настроек -> Direct
     if (directDomains.isNotEmpty) {
       rules.add({
-        "domain_suffix": directDomains, // domain_suffix для поддоменов
+        "domain_suffix": directDomains,
         "outbound": "direct"
       });
     }
 
-    // 5. Direct IPs из настроек -> Direct
     if (directIps.isNotEmpty) {
       rules.add({
         "ip_cidr": directIps,
@@ -399,13 +364,11 @@ class SingBoxChainGen {
       });
     }
 
-    // 6. Локальные сети -> Direct
     rules.add({
       "ip_is_private": true,
       "outbound": "direct"
     });
 
-    // 7. Proxy домены из настроек -> Proxy (принудительно через VPN)
     if (proxyDomains.isNotEmpty) {
       rules.add({
         "domain_suffix": proxyDomains,
@@ -413,15 +376,12 @@ class SingBoxChainGen {
       });
     }
 
-    // 8. Всё остальное -> Proxy
     rules.add({
       "outbound": "proxy-out"
     });
 
-    // --- DNS RULES ---
     final dnsRules = <Map<String, dynamic>>[];
 
-    // Direct домены резолвим через локальный DNS
     if (directDomains.isNotEmpty) {
       dnsRules.add({
         "domain_suffix": directDomains,
@@ -429,7 +389,6 @@ class SingBoxChainGen {
       });
     }
 
-    // Всё остальное через Google DNS (через прокси)
     dnsRules.add({
       "server": "google-dns"
     });
@@ -461,10 +420,10 @@ class SingBoxChainGen {
           "tag": "tun-in",
           "interface_name": "tun-keqdis",
           "address": ["172.19.0.1/30"],
-          "mtu": 1400, // Уменьшили для стабильности
+          "mtu": 1400,
           "auto_route": true,
           "strict_route": true,
-          "stack": "mixed", // КРИТИЧНО! mixed быстрее gvisor
+          "stack": "mixed",
           "sniff": true,
           "sniff_override_destination": false
         }

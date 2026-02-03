@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'improved_theme_manager.dart';
+import '../improved_theme_manager.dart';
 
-/// Красивое кастомное уведомление вместо стандартного Snackbar
 class CustomNotification {
   static void show(
       BuildContext context, {
@@ -17,17 +16,17 @@ class CustomNotification {
 
     switch (type) {
       case NotificationType.success:
-        backgroundColor = const Color(0xFF10B981); // зеленый
+        backgroundColor = const Color(0xFF10B981);
         iconColor = Colors.white;
         defaultIcon = Icons.check_circle;
         break;
       case NotificationType.error:
-        backgroundColor = const Color(0xFFEF4444); // красный
+        backgroundColor = const Color(0xFFEF4444);
         iconColor = Colors.white;
         defaultIcon = Icons.error;
         break;
       case NotificationType.warning:
-        backgroundColor = const Color(0xFFF59E0B); // оранжевый
+        backgroundColor = const Color(0xFFF59E0B);
         iconColor = Colors.white;
         defaultIcon = Icons.warning;
         break;
@@ -55,7 +54,6 @@ class CustomNotification {
 
     overlay.insert(overlayEntry);
 
-    // Автоматическое удаление
     Future.delayed(duration, () {
       if (overlayEntry.mounted) {
         overlayEntry.remove();
@@ -105,7 +103,7 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
     );
 
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1), // Снизу вверх
+      begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _controller,
@@ -138,7 +136,7 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 80, // Внизу экрана
+      bottom: 80,
       left: 20,
       right: 20,
       child: SlideTransition(
@@ -162,7 +160,6 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
               ),
               child: Row(
                 children: [
-                  // Иконка
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -176,7 +173,6 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
                     ),
                   ),
                   const SizedBox(width: 16),
-                  // Сообщение
                   Expanded(
                     child: Text(
                       widget.message,
@@ -188,7 +184,6 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Кнопка закрытия
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
                     onPressed: _dismiss,

@@ -36,7 +36,6 @@ class PingService {
     }
   }
 
-  /// TCP пинг — быстрая проверка доступности по сокету
   static Future<PingResult> pingTcp(String config, {int timeoutSeconds = 5}) async {
     final parsed = _parseVlessConfig(config);
     if (parsed == null) {
@@ -94,10 +93,6 @@ class PingService {
     }
   }
 
-  /// Пинг через локальный прокси — лёгкий, 2 шага:
-  /// 1) HEAD https://www.google.com  — проверяем что прокси вообще работает + TLS
-  /// 2) GET  http://www.gstatic.com/generate_204 — проверяем маршрутизацию (204, почти 0 байт)
-  /// Итого: реальная проверка тоннеля без тяжёлой загрузки.
   static Future<PingResult> pingProxy(String config, int proxyPort, {int timeoutSeconds = 10}) async {
     final parsed = _parseVlessConfig(config);
     if (parsed == null) {
@@ -119,7 +114,6 @@ class PingService {
 
       final stopwatch = Stopwatch()..start();
 
-      // --- Шаг 1: HEAD google — проверяем TLS + базовую связь ---
       final req1 = await client.headUrl(Uri.parse('https://www.google.com'));
       req1.headers.set('User-Agent',
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
@@ -139,7 +133,6 @@ class PingService {
         );
       }
 
-      // --- Шаг 2: GET gstatic generate_204 — лёгкая маршрутизация ---
       final req2 = await client.getUrl(Uri.parse('http://www.gstatic.com/generate_204'));
       req2.headers.set('User-Agent',
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
@@ -195,7 +188,6 @@ class PingService {
     }
   }
 
-  /// Универсальный метод пинга
   static Future<PingResult> ping(
       String config,
       PingType type,
@@ -209,7 +201,6 @@ class PingService {
     }
   }
 
-  /// Пинг нескольких серверов
   static Future<List<PingResult>> pingMultiple(
       List<String> configs,
       PingType type,

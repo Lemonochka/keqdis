@@ -10,7 +10,6 @@ class VpnService {
 
   bool get isRunning => _isRunning;
 
-  // ОБНОВЛЕНО: Добавлены sing-box.exe и wintun.dll
   final List<String> _requiredFiles = [
     'xray.exe',
     'sing-box.exe',
@@ -19,25 +18,21 @@ class VpnService {
     'geosite.dat'
   ];
 
-  /// БЕЗОПАСНОСТЬ: Валидация имени процесса
   bool _isValidExecutable(String exeName) {
-    // Разрешаем только наши бинарники
     return exeName == 'xray.exe' || exeName == 'sing-box.exe';
   }
 
-  /// БЕЗОПАСНОСТЬ: Завершение конкретного типа процессов перед запуском
   Future<void> _killExistingProcess(String exeName) async {
     if (!_isValidExecutable(exeName)) {
       throw ArgumentError('Недопустимое имя процесса для очистки: $exeName');
     }
 
     try {
-      // Убиваем только процессы с таким же именем (чтобы xray не убил sing-box)
       if (Platform.isWindows) {
         await Process.run('taskkill', ['/F', '/IM', exeName]);
       }
     } catch (e) {
-      // Игнорируем, если процесс не был запущен
+      // Process may not exist
     }
   }
 
@@ -61,8 +56,6 @@ class VpnService {
 
       if (!await file.exists()) {
         try {
-          // Пытаемся загрузить. Если файла нет в assets (например wintun),
-          // приложение может упасть, поэтому оборачиваем в try
           final data = await rootBundle.load('assets/bin/$fileName');
           final bytes = data.buffer.asUint8List();
 
@@ -81,18 +74,12 @@ class VpnService {
                 '${Platform.environment['USERNAME']}:RX'
               ]);
             } catch (e) {
-              print('Warning ACL: $e');
+              // ACL setup failed, continue anyway
             }
           }
-          print("📦 Распакован: $fileName");
         } catch (e) {
-          // Если wintun.dll или dat файлы не найдены в ассетах — не критично,
-          // но exe файлы обязаны быть.
           if (fileName.endsWith('.exe')) {
-            print("❌ Ошибка распаковки критического файла $fileName: $e");
             throw e;
-          } else {
-            print("⚠️ Пропущен файл $fileName (не найден в assets): $e");
           }
         }
       }
@@ -106,13 +93,11 @@ class VpnService {
     return _requiredFiles.contains(fileName);
   }
 
-  /// Получить директорию с бинарниками (нужно для wintun.dll)
   Future<String> getXrayDir() async {
     final dir = await getApplicationSupportDirectory();
     return dir.path;
   }
 
-  /// ОБНОВЛЕНО: Теперь принимает имя файла и аргументы
   Future<void> start(
       String configJson, {
         String executableName = 'xray.exe',
@@ -120,12 +105,10 @@ class VpnService {
       }) async {
     if (_isRunning) return;
 
-    // Проверка безопасности имени файла
     if (!_isValidExecutable(executableName)) {
       throw SecurityException('Попытка запуска запрещенного файла: $executableName');
     }
 
-    // Чистим старые процессы именно этого типа
     await _killExistingProcess(executableName);
 
     final dir = await getApplicationSupportDirectory();
@@ -140,7 +123,6 @@ class VpnService {
     final configFile = File(configPath);
     await configFile.writeAsString(configJson);
 
-    // Распаковываем всё необходимое (xray, sing-box, wintun)
     await _prepareAssets();
 
     final exePath = path.join(dir.path, executableName);
@@ -150,19 +132,13 @@ class VpnService {
     }
 
     try {
-      // Формируем аргументы.
-      // Если args не переданы, используем дефолт для Xray (run -c config)
-      // Для Sing-box мы будем передавать args явно из CoreManager
       final runArgs = args ?? ['run', '-c', configPath];
 
-      // Валидация аргументов
       for (final arg in runArgs) {
         if (arg.contains('&') || arg.contains('|')) {
           throw SecurityException('Недопустимые символы в аргументах');
         }
       }
-
-      print('🚀 Запуск $executableName с аргументами: $runArgs');
 
       _process = await Process.start(
         exePath,
@@ -176,25 +152,17 @@ class VpnService {
 
       _isRunning = true;
 
-      // Логирование
       _process?.stdout.transform(utf8.decoder).listen((log) {
-        // Убрали сильное ограничение длины для отладки, но оставили разумное
-        if (log.length > 500) {
-          print("[$executableName]: ${log.substring(0, 500)}...");
-        } else {
-          print("[$executableName]: ${log.trim()}");
-        }
+        // Output suppressed
       });
 
       _process?.stderr.transform(utf8.decoder).listen((err) {
-        print("[$executableName ERR]: $err");
         if (err.contains('Failed') || err.contains('panic') || err.contains('FATAL')) {
           _isRunning = false;
         }
       });
 
       _process?.exitCode.then((code) {
-        print("$executableName завершился с кодом: $code");
         _isRunning = false;
         _process = null;
       });
@@ -207,7 +175,6 @@ class VpnService {
   }
 
   Future<void> stop() async {
-    // Мягкая остановка текущего процесса инстанса
     _process?.kill();
     _process = null;
     _isRunning = false;
