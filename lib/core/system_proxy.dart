@@ -1,117 +1,73 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class SystemProxy {
   static bool _isValidProxyAddress(String address) {
-    final pattern = RegExp(r'^((\d{1,3}\.){3}\d{1,3}|localhost|127\.0\.0\.1):\d{1,5}$');
-
-    if (!pattern.hasMatch(address)) {
+    final uri = Uri.tryParse('tcp://$address');
+    if (uri == null || uri.host.isEmpty || uri.port == 0) {
       return false;
     }
-
-    final parts = address.split(':');
-    if (parts.length != 2) return false;
-
-    try {
-      final port = int.parse(parts[1]);
-      if (port < 1 || port > 65535) {
-        return false;
-      }
-    } catch (e) {
-      return false;
-    }
-
-    if (parts[0] != 'localhost' && !parts[0].startsWith('127.')) {
-      final ipParts = parts[0].split('.');
-      if (ipParts.length != 4) return false;
-
-      for (final part in ipParts) {
-        try {
-          final num = int.parse(part);
-          if (num < 0 || num > 255) {
-            return false;
-          }
-        } catch (e) {
-          return false;
-        }
-      }
-    }
-
     return true;
+  }
+
+  static Future<void> _runRegCommand(List<String> args) async {
+    if (!Platform.isWindows) return;
+    try {
+      final result = await Process.run('reg', args, runInShell: true);
+      if (result.exitCode != 0) {
+        throw Exception('REG command failed with exit code ${result.exitCode}: ${result.stderr}');
+      }
+    } catch (e, s) {
+      debugPrint('Failed to execute REG command: $e\n$s');
+      rethrow;
+    }
+  }
+
+  static Future<void> _setSystemProxy(String address) async {
+    await _runRegCommand([
+      'add',
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+      '/v',
+      'ProxyServer',
+      '/t',
+      'REG_SZ',
+      '/d',
+      address,
+      '/f'
+    ]);
+
+    await _runRegCommand([
+      'add',
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+      '/v',
+      'ProxyEnable',
+      '/t',
+      'REG_DWORD',
+      '/d',
+      '1',
+      '/f'
+    ]);
   }
 
   static Future<void> setHTTPProxy({String address = '127.0.0.1:2080'}) async {
     if (!_isValidProxyAddress(address)) {
       throw ArgumentError('Некорректный адрес прокси: $address');
     }
-
-    try {
-      await Process.run('reg', [
-        'add',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyServer',
-        '/t',
-        'REG_SZ',
-        '/d',
-        address,
-        '/f'
-      ]);
-
-      await Process.run('reg', [
-        'add',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyEnable',
-        '/t',
-        'REG_DWORD',
-        '/d',
-        '1',
-        '/f'
-      ]);
-    } catch (e) {
-      rethrow;
-    }
+    await _setSystemProxy(address);
   }
 
   static Future<void> setSOCKSProxy({String address = '127.0.0.1:1080'}) async {
     if (!_isValidProxyAddress(address)) {
       throw ArgumentError('Некорректный адрес прокси: $address');
     }
-
-    try {
-      final proxyValue = 'socks=$address';
-
-      await Process.run('reg', [
-        'add',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyServer',
-        '/t',
-        'REG_SZ',
-        '/d',
-        proxyValue,
-        '/f'
-      ]);
-
-      await Process.run('reg', [
-        'add',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyEnable',
-        '/t',
-        'REG_DWORD',
-        '/d',
-        '1',
-        '/f'
-      ]);
-    } catch (e) {
-      rethrow;
-    }
+    final proxyValue = 'socks=$address';
+    await _setSystemProxy(proxyValue);
   }
 
   static Future<void> clearProxy() async {
+     if (!Platform.isWindows) return;
     try {
-      await Process.run('reg', [
+       await _runRegCommand([
         'add',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
         '/v',
@@ -122,12 +78,15 @@ class SystemProxy {
         '0',
         '/f'
       ]);
-    } catch (e) {
-      // Ignore errors during cleanup
+    } catch (e, s) {
+       debugPrint('Failed to clear proxy settings: $e\n$s');
+      // Do not rethrow, as clearing is a cleanup operation
     }
   }
 
   static Future<ProxyState> getProxyState() async {
+    if (!Platform.isWindows) return ProxyState(enabled: false);
+
     try {
       final result = await Process.run('reg', [
         'query',
@@ -136,36 +95,38 @@ class SystemProxy {
         'ProxyEnable',
       ]);
 
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString();
-        final enabled = output.contains('0x1');
+      if (result.exitCode != 0) {
+        return ProxyState(enabled: false);
+      }
 
-        if (enabled) {
-          final addressResult = await Process.run('reg', [
-            'query',
-            r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-            '/v',
-            'ProxyServer',
-          ]);
+      final output = result.stdout.toString();
+      final isEnabled = output.contains(RegExp(r'ProxyEnable\s+REG_DWORD\s+0x1'));
 
-          if (addressResult.exitCode == 0) {
-            final addressOutput = addressResult.stdout.toString();
-            final match = RegExp(r'ProxyServer\s+REG_SZ\s+(.+)').firstMatch(addressOutput);
+      if (!isEnabled) {
+        return ProxyState(enabled: false);
+      }
 
-            if (match != null) {
-              return ProxyState(
-                enabled: true,
-                address: match.group(1)?.trim(),
-              );
-            }
-          }
+      final addressResult = await Process.run('reg', [
+        'query',
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+        '/v',
+        'ProxyServer',
+      ]);
 
-          return ProxyState(enabled: true);
+      if (addressResult.exitCode == 0) {
+        final addressOutput = addressResult.stdout.toString();
+        final match = RegExp(r'ProxyServer\s+REG_SZ\s+(.+)').firstMatch(addressOutput);
+        if (match != null) {
+          return ProxyState(
+            enabled: true,
+            address: match.group(1)?.trim(),
+          );
         }
       }
 
-      return ProxyState(enabled: false);
-    } catch (e) {
+      return ProxyState(enabled: true);
+    } catch (e, s) {
+      debugPrint('Failed to get proxy state: $e\n$s');
       return ProxyState(enabled: false);
     }
   }

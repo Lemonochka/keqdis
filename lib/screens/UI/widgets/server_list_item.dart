@@ -96,13 +96,7 @@ class ServerListItem extends StatelessWidget {
                         ),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: server.countryCode?.isNotEmpty == true
-                          ? CountryFlag.fromCountryCode(
-                        server.countryCode!,
-                        width: 44,
-                        height: 44,
-                      )
-                          : Container(
+                      child: Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(

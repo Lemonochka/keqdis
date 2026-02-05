@@ -54,10 +54,14 @@ class VpnController extends ChangeNotifier {
   }
 
   Future<void> loadInitialServers() async {
-    _allServers = await UnifiedStorage.loadServers();
+    _allServers = await UnifiedStorage.getServers();
     _sortServers();
-    _favoriteServers = await UnifiedStorage.getFavoriteServers();
-    _selectedServer = await UnifiedStorage.getLastServer();
+    _favoriteServers = _allServers.where((s) => s.isFavorite).toList();
+    final lastServerId = await UnifiedStorage.loadLastServerId();
+    if (lastServerId != null) {
+      final potentialServers = _allServers.where((s) => s.id == lastServerId);
+      _selectedServer = potentialServers.isNotEmpty ? potentialServers.first : null;
+    }
     _searchResults = [];
     notifyListeners();
   }
@@ -102,13 +106,24 @@ class VpnController extends ChangeNotifier {
     notifyListeners();
   }
 
- Future<void> switchVpnMode(VpnMode newMode) async {
+  Future<void> switchVpnMode(VpnMode newMode) async {
     if (_vpnMode == newMode) return;
 
     _vpnMode = newMode;
     final settings = await SettingsStorage.loadSettings();
-    settings.lastVpnMode = newMode.name;
-    await SettingsStorage.saveSettings(settings);
+    await SettingsStorage.saveSettings(AppSettings(
+      localPort: settings.localPort,
+      directDomains: settings.directDomains,
+      blockedDomains: settings.blockedDomains,
+      directIps: settings.directIps,
+      proxyDomains: settings.proxyDomains,
+      autoStart: settings.autoStart,
+      minimizeToTray: settings.minimizeToTray,
+      startMinimized: settings.startMinimized,
+      pingType: settings.pingType,
+      autoConnectLastServer: settings.autoConnectLastServer,
+      lastVpnMode: newMode.name,
+    ));
     notifyListeners();
 
     if (_isConnected) {
@@ -177,10 +192,14 @@ class VpnController extends ChangeNotifier {
     final settings = await SettingsStorage.loadSettings();
     if (!settings.autoConnectLastServer) return;
 
-    final lastServer = await UnifiedStorage.getLastServer();
-    if (lastServer != null) {
-      selectServer(lastServer);
-      await connect();
+    final lastServerId = await UnifiedStorage.loadLastServerId();
+    if (lastServerId != null) {
+      final potentialServers = _allServers.where((s) => s.id == lastServerId);
+      final ServerItem? lastServer = potentialServers.isNotEmpty ? potentialServers.first : null;
+      if (lastServer != null) {
+        selectServer(lastServer);
+        await connect();
+      }
     }
   }
 

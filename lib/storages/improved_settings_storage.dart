@@ -1,19 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'unified_storage.dart';
 
 class AppSettings {
-  int localPort;
-  String directDomains;
-  String blockedDomains;
-  String directIps;
-  String proxyDomains;
-  bool autoStart;
-  bool minimizeToTray;
-  bool startMinimized;
-  String pingType;
-  bool autoConnectLastServer;
-  String lastVpnMode;
+  final int localPort;
+  final String directDomains;
+  final String blockedDomains;
+  final String directIps;
+  final String proxyDomains;
+  final bool autoStart;
+  final bool minimizeToTray;
+  final bool startMinimized;
+  final String pingType;
+  final bool autoConnectLastServer;
+  final String lastVpnMode;
 
   AppSettings({
     this.localPort = 2080,
@@ -30,55 +31,73 @@ class AppSettings {
   });
 
   Map<String, dynamic> toJson() => {
-    'localPort': localPort,
-    'directDomains': directDomains,
-    'blockedDomains': blockedDomains,
-    'directIps': directIps,
-    'proxyDomains': proxyDomains,
-    'autoStart': autoStart,
-    'minimizeToTray': minimizeToTray,
-    'startMinimized': startMinimized,
-    'pingType': pingType,
-    'autoConnectLastServer': autoConnectLastServer,
-    'lastVpnMode': lastVpnMode,
-  };
+        'localPort': localPort,
+        'directDomains': directDomains,
+        'blockedDomains': blockedDomains,
+        'directIps': directIps,
+        'proxyDomains': proxyDomains,
+        'autoStart': autoStart,
+        'minimizeToTray': minimizeToTray,
+        'startMinimized': startMinimized,
+        'pingType': pingType,
+        'autoConnectLastServer': autoConnectLastServer,
+        'lastVpnMode': lastVpnMode,
+      };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
-      localPort: json['localPort'] ?? 2080,
-      directDomains: json['directDomains'] ?? 'yandex.ru, vk.com',
-      blockedDomains: json['blockedDomains'] ?? '',
-      directIps: json['directIps'] ?? '192.168.0.0/16, 10.0.0.0/8, 127.0.0.0/8',
-      proxyDomains: json['proxyDomains'] ?? '',
-      autoStart: json['autoStart'] ?? false,
-      minimizeToTray: json['minimizeToTray'] ?? true,
-      startMinimized: json['startMinimized'] ?? false,
-      pingType: json['pingType'] ?? 'tcp',
-      autoConnectLastServer: json['autoConnectLastServer'] ?? false,
-      lastVpnMode: json['lastVpnMode'] ?? 'systemProxy',
+      localPort: json['localPort'] is int ? json['localPort'] : 2080,
+      directDomains: json['directDomains'] is String
+          ? json['directDomains']
+          : 'yandex.ru, vk.com',
+      blockedDomains:
+          json['blockedDomains'] is String ? json['blockedDomains'] : '',
+      directIps: json['directIps'] is String
+          ? json['directIps']
+          : '192.168.0.0/16, 10.0.0.0/8, 127.0.0.0/8',
+      proxyDomains: json['proxyDomains'] is String ? json['proxyDomains'] : '',
+      autoStart: json['autoStart'] is bool ? json['autoStart'] : false,
+      minimizeToTray:
+          json['minimizeToTray'] is bool ? json['minimizeToTray'] : true,
+      startMinimized:
+          json['startMinimized'] is bool ? json['startMinimized'] : false,
+      pingType: json['pingType'] is String ? json['pingType'] : 'tcp',
+      autoConnectLastServer: json['autoConnectLastServer'] is bool
+          ? json['autoConnectLastServer']
+          : false,
+      lastVpnMode:
+          json['lastVpnMode'] is String ? json['lastVpnMode'] : 'systemProxy',
     );
   }
 }
 
 class SettingsStorage {
   static const String _settingsFile = 'settings.json';
+  static AppSettings? _cachedSettings;
 
   static Future<AppSettings> loadSettings() async {
+    if (_cachedSettings != null) {
+      return _cachedSettings!;
+    }
+
     try {
       final filePath = await PortableStorage.getFilePath(_settingsFile);
       final file = File(filePath);
 
-      if (!await file.exists()) {
-        return AppSettings();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          final decoded = Map<String, dynamic>.from(json.decode(content));
+          _cachedSettings = AppSettings.fromJson(decoded);
+          return _cachedSettings!;
+        }
       }
-
-      final content = await file.readAsString();
-      final decoded = Map<String, dynamic>.from(json.decode(content));
-
-      return AppSettings.fromJson(decoded);
-    } catch (e) {
-      return AppSettings();
+    } catch (e, s) {
+      debugPrint('Failed to load settings: $e\n$s');
     }
+    
+    _cachedSettings = AppSettings();
+    return _cachedSettings!;
   }
 
   static Future<void> saveSettings(AppSettings settings) async {
@@ -88,13 +107,16 @@ class SettingsStorage {
 
       final jsonString = json.encode(settings.toJson());
       await file.writeAsString(jsonString);
-    } catch (e) {
+      _cachedSettings = settings;
+    } catch (e, s) {
+      debugPrint('Failed to save settings: $e\n$s');
       throw Exception('Не удалось сохранить настройки');
     }
   }
 
   static Future<void> resetSettings() async {
-    await saveSettings(AppSettings());
+    final defaultSettings = AppSettings();
+    await saveSettings(defaultSettings);
   }
 
   static Future<String> exportSettings() async {

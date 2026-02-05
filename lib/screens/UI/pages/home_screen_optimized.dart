@@ -12,22 +12,16 @@ import 'package:keqdis/services/improved_subscription_service.dart';
 import 'package:keqdis/core/system_proxy.dart';
 import 'package:keqdis/core/tun_service.dart';
 import 'package:keqdis/utils/single_instance_manager.dart';
-import 'package:keqdis/utils/server_name_utils.dart';
 
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/screens/UI/controller/vpn_controller.dart';
 import 'package:keqdis/screens/ping_manager.dart';
 
-import '../widgets/power_button.dart';
-import '../widgets/vpn_mode_switch.dart';
-import '../widgets/server_search_bar.dart';
-import '../widgets/server_list_item.dart';
 import '../widgets/add_server_dialog.dart';
 import '../widgets/custom_notification.dart';
-import '../widgets/connection_status.dart';
 
-import 'subscriptions_screen.dart'; // Содержит SubscriptionsView
-import 'settings_screen.dart';       // Содержит SettingsView
+import 'home_sidebar.dart';
+import 'home_main_content.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool isAutoStarted;
@@ -40,73 +34,65 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, WindowListener {
-
-  // Сервисы
   final _trayService = TrayService();
   late final AppLifecycleListener _listener;
 
-  // Контроллеры
   late VpnController _vpnController;
   late PingManager _pingManager;
+  final ThemeManager _themeManager = ThemeManager();
 
-  // ИСПРАВЛЕНИЕ: Кэш ThemeManager для предотвращения множественных вызовов
-  late ThemeManager _themeManager;
-
-  // UI состояние
   int _currentTab = 0;
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
   final Map<String, bool> _serverPingingState = {};
 
-  // Настройки
   AppSettings _settings = AppSettings();
   bool _tunAvailable = false;
   bool _isReallyExiting = false;
 
-  // Автообновление подписок
   Timer? _autoUpdateTimer;
+
+  // Image cache
+  ImageProvider? _cachedBackgroundImageProvider;
+  String? _currentBackgroundImagePath;
 
   @override
   void initState() {
     super.initState();
 
-    // ИСПРАВЛЕНИЕ: Инициализируем ThemeManager один раз
-    _themeManager = ThemeManager();
-
-    // Инициализация контроллеров
     _vpnController = VpnController();
     _pingManager = PingManager();
+    _themeManager.addListener(_onThemeChanged);
 
-    // Window listener
     windowManager.addListener(this);
     _listener = AppLifecycleListener(onExitRequested: _onAppExit);
     windowManager.setPreventClose(true);
 
-    // Инициализация приложения
     _initializeApp();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateCachedImage();
   }
 
   Future<void> _initializeApp() async {
     try {
-      // Загрузка данных
       await Future.wait([
         _vpnController.loadInitialServers(),
         _loadSettings(),
       ]);
 
-      // Проверка TUN
-      await _checkTunAvailability();
+      if (!mounted) return;
 
-      // Инициализация трея
+      await _checkTunAvailability();
       await _initializeTray();
 
-      // Слушатель для обновления трея
       _vpnController.addListener(_updateTrayStatus);
 
-      // Автообновление подписок
       _startSubscriptionAutoUpdate();
 
-      // Автоподключение
       if (_settings.autoConnectLastServer) {
         await _vpnController.autoConnectToLastServer();
       }
@@ -115,14 +101,49 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // ИСПРАВЛЕНИЕ: Метод для обновления статуса трея
   void _updateTrayStatus() {
     _trayService.updateConnectionStatus(_vpnController.isConnected);
   }
 
   Future<void> _loadSettings() async {
     _settings = await SettingsStorage.loadSettings();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _onThemeChanged() {
+    if (mounted) {
+      _updateCachedImage();
+    }
+  }
+
+  void _updateCachedImage() {
+    final newPath = _themeManager.settings.backgroundImagePath;
+    if (_currentBackgroundImagePath == newPath && _cachedBackgroundImageProvider != null) {
+      return;
+    }
+    _currentBackgroundImagePath = newPath;
+
+    if (newPath == null) {
+      if (_cachedBackgroundImageProvider != null) {
+        setState(() => _cachedBackgroundImageProvider = null);
+      }
+      return;
+    }
+
+    final imageProvider = FileImage(File(newPath));
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+
+    setState(() {
+      _cachedBackgroundImageProvider = ResizeImage(
+        imageProvider,
+        width: screenWidth,
+        height: screenHeight,
+      );
+    });
   }
 
   Future<void> _checkTunAvailability() async {
@@ -146,10 +167,10 @@ class _HomeScreenState extends State<HomeScreen>
   void _startSubscriptionAutoUpdate() {
     _autoUpdateTimer = Timer.periodic(
       const Duration(hours: 12),
-          (_) async {
+      (_) async {
         try {
           final dueSubscriptions =
-          await SubscriptionService.getSubscriptionsDueForUpdate(
+              await SubscriptionService.getSubscriptionsDueForUpdate(
             interval: const Duration(hours: 12),
           );
 
@@ -166,7 +187,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
-    // ИСПРАВЛЕНИЕ: Удаляем слушателя, чтобы избежать утечек памяти
     _vpnController.removeListener(_updateTrayStatus);
     windowManager.removeListener(this);
     _listener.dispose();
@@ -175,6 +195,7 @@ class _HomeScreenState extends State<HomeScreen>
     _autoUpdateTimer?.cancel();
     _vpnController.dispose();
     _pingManager.dispose();
+    _themeManager.removeListener(_onThemeChanged);
     SingleInstanceManager.release();
     super.dispose();
   }
@@ -255,31 +276,25 @@ class _HomeScreenState extends State<HomeScreen>
         _vpnController.switchVpnMode(newMode);
         await _vpnController.toggleConnection();
 
-        if (mounted) {
-          CustomNotification.show(
-            context,
-            message: 'Режим изменен на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
-            type: NotificationType.success,
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          CustomNotification.show(
-            context,
-            message: 'Ошибка смены режима: $e',
-            type: NotificationType.error,
-          );
-        }
-      }
-    } else {
-      _vpnController.switchVpnMode(newMode);
-      if (mounted) {
         CustomNotification.show(
           context,
           message: 'Режим изменен на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
           type: NotificationType.success,
         );
+      } catch (e) {
+        CustomNotification.show(
+          context,
+          message: 'Ошибка смены режима: $e',
+          type: NotificationType.error,
+        );
       }
+    } else {
+      _vpnController.switchVpnMode(newMode);
+      CustomNotification.show(
+        context,
+        message: 'Режим изменен на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
+        type: NotificationType.success,
+      );
     }
   }
 
@@ -330,45 +345,38 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _restartAsAdmin() async {
     try {
       if (Platform.isWindows) {
-        // Получаем путь к исполняемому файлу
         final exePath = Platform.resolvedExecutable;
 
-        // Запускаем процесс с правами администратора через PowerShell
         await Process.start(
           'powershell',
           [
             '-Command',
             'Start-Process',
             '-FilePath',
-            '"$exePath"',
+            '\"$exePath\"',
             '-Verb',
             'RunAs',
           ],
+          runInShell: true,
           mode: ProcessStartMode.detached,
         );
 
-        // Даем время на запуск нового процесса
         await Future.delayed(const Duration(milliseconds: 500));
 
-        // Закрываем текущее приложение
         await _exitApp();
       } else {
-        if (mounted) {
-          CustomNotification.show(
-            context,
-            message: 'Перезапуск с правами администратора доступен только на Windows',
-            type: NotificationType.error,
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
         CustomNotification.show(
           context,
-          message: 'Ошибка перезапуска: $e',
+          message: 'Перезапуск с правами администратора доступен только на Windows',
           type: NotificationType.error,
         );
       }
+    } catch (e) {
+      CustomNotification.show(
+        context,
+        message: 'Ошибка перезапуска: $e',
+        type: NotificationType.error,
+      );
     }
   }
 
@@ -407,13 +415,11 @@ class _HomeScreenState extends State<HomeScreen>
             }
           }
 
-          if (mounted) {
-            CustomNotification.show(
-              context,
-              message: 'Добавлено серверов: $successCount из ${configs.length}',
-              type: NotificationType.success,
-            );
-          }
+          CustomNotification.show(
+            context,
+            message: 'Добавлено серверов: $successCount из ${configs.length}',
+            type: NotificationType.success,
+          );
         },
       ),
     );
@@ -425,31 +431,43 @@ class _HomeScreenState extends State<HomeScreen>
       providers: [
         ChangeNotifierProvider.value(value: _vpnController),
         ChangeNotifierProvider.value(value: _pingManager),
+        ChangeNotifierProvider.value(value: _themeManager),
       ],
       child: Scaffold(
         body: Stack(
           children: [
-            // Кастомный фон (если есть)
-            if (_themeManager.hasCustomBackground)
+            if (_themeManager.hasCustomBackground && _cachedBackgroundImageProvider != null)
               Positioned.fill(
                 child: _buildOptimizedBackground(context),
               ),
-
-            // Основной контент
             Row(
               children: [
-                // ОБНОВЛЕНО: Левая колонка с прозрачностью
-                _buildSidebar(),
-
-                // Вертикальный разделитель
+                HomeSidebar(
+                  currentTab: _currentTab,
+                  onTabChanged: (tab) => setState(() => _currentTab = tab),
+                ),
                 Container(
                   width: 1,
                   color: Colors.white.withAlpha(26), // 0.1 opacity
                 ),
-
-                // Основная область
                 Expanded(
-                  child: _buildMainContent(),
+                  child: HomeMainContent(
+                    currentTab: _currentTab,
+                    settings: _settings,
+                    tunAvailable: _tunAvailable,
+                    searchController: _searchController,
+                    onSearchChanged: _onSearchChanged,
+                    onClearSearch: () {
+                      _searchController.clear();
+                      _vpnController.searchServers('');
+                    },
+                    onAddServer: _showAddServerDialog,
+                    onPingAll: _pingAllServers,
+                    onPing: _pingServer,
+                    serverPingingState: _serverPingingState,
+                    onVpnModeChanged: _handleVpnModeSwitch,
+                    onSettingsChanged: _loadSettings,
+                  ),
                 ),
               ],
             ),
@@ -460,24 +478,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildOptimizedBackground(BuildContext context) {
-    final path = _themeManager.settings.backgroundImagePath!;
-    final imageProvider = FileImage(File(path));
-
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
-    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
-
-    final resizedImageProvider = ResizeImage(
-      imageProvider,
-      width: screenWidth,
-      height: screenHeight,
-    );
-
     return Stack(
       fit: StackFit.expand,
       children: [
         Image(
-          image: resizedImageProvider,
+          image: _cachedBackgroundImageProvider!,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             debugPrint('Ошибка загрузки фонового изображения: $error');
@@ -494,464 +499,6 @@ class _HomeScreenState extends State<HomeScreen>
             color: Colors.black.withAlpha(
               (255 * (1.0 - _themeManager.settings.backgroundOpacity)).round(),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ОБНОВЛЕНО: Левая колонка с прозрачностью
-  Widget _buildSidebar() {
-    return Container(
-      width: 280,
-      decoration: BoxDecoration(
-        // Добавляем полупрозрачный фон
-        color: _themeManager.settings.accentColor.withAlpha(77), // 0.3 opacity
-        border: Border(
-          right: BorderSide(
-            color: Colors.white.withAlpha(13), // 0.05 opacity
-            width: 1,
-          ),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Статус подключения (перемещен наверх)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Consumer<VpnController>(
-              builder: (context, controller, _) => ConnectionStatus(
-                status: controller.isConnected
-                    ? 'Подключено'
-                    : controller.isConnecting
-                    ? 'Подключение...'
-                    : 'Отключено',
-                isConnected: controller.isConnected,
-              ),
-            ),
-          ),
-
-          const Divider(height: 1, color: Colors.white10),
-
-          // Навигационные кнопки
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                _buildNavButton(
-                  icon: Icons.dns,
-                  label: 'Серверы',
-                  isSelected: _currentTab == 0,
-                  onTap: () => setState(() => _currentTab = 0),
-                ),
-                _buildNavButton(
-                  icon: Icons.rss_feed,
-                  label: 'Подписки',
-                  isSelected: _currentTab == 1,
-                  onTap: () => setState(() => _currentTab = 1),
-                ),
-                _buildNavButton(
-                  icon: Icons.settings,
-                  label: 'Настройки',
-                  isSelected: _currentTab == 2,
-                  onTap: () => setState(() => _currentTab = 2),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(height: 1, color: Colors.white10),
-
-          // Версия
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'v1.0.0',
-              style: TextStyle(
-                color: Colors.white.withAlpha(77), // 0.3 opacity
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavButton({
-    required IconData icon,
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? _themeManager.settings.primaryColor.withAlpha(51) // 0.2 opacity
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: isSelected
-                  ? Border.all(
-                color: _themeManager.settings.primaryColor.withAlpha(128), // 0.5 opacity
-                width: 1,
-              )
-                  : null,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected
-                      ? _themeManager.settings.primaryColor
-                      : Colors.white70,
-                  size: 22,
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white70,
-                    fontSize: 15,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMainContent() {
-    switch (_currentTab) {
-      case 0:
-        return _buildServerList();
-      case 1:
-        return SubscriptionsView(
-          onServersUpdated: () async {
-            await _vpnController.loadInitialServers();
-          },
-        );
-      case 2:
-        return SettingsView(
-          onSettingsChanged: () async {
-            await _loadSettings();
-          },
-        );
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  Widget _buildServerList() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Левая часть - поиск и список серверов
-        Expanded(
-          flex: 3,
-          child: Column(
-            children: [
-              // Поиск
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: ServerSearchBar(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  onClear: () {
-                    _searchController.clear();
-                    _vpnController.searchServers('');
-                  },
-                ),
-              ),
-
-              // Компактные кнопки
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    // Кнопка добавления
-                    Tooltip(
-                      message: 'Добавить сервер',
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: _themeManager.settings.accentColor.withAlpha(77), // 0.3 opacity
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _themeManager.settings.primaryColor.withAlpha(77), // 0.3 opacity
-                            width: 1,
-                          ),
-                        ),
-                        child: IconButton(
-                          onPressed: _showAddServerDialog,
-                          icon: Icon(
-                            Icons.add_rounded,
-                            color: _themeManager.settings.primaryColor,
-                            size: 22,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // Кнопка пинга всех
-                    Consumer<PingManager>(
-                      builder: (context, pingManager, _) => Tooltip(
-                        message: 'Пинг всех серверов',
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: _themeManager.settings.accentColor.withAlpha(77), // 0.3 opacity
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _themeManager.settings.primaryColor.withAlpha(77), // 0.3 opacity
-                              width: 1,
-                            ),
-                          ),
-                          child: IconButton(
-                            onPressed: pingManager.isPinging
-                                ? null
-                                : () => _pingAllServers(
-                                _vpnController.searchResults.isNotEmpty
-                                    ? _vpnController.searchResults
-                                    : _vpnController.allServers
-                            ),
-                            icon: pingManager.isPinging
-                                ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _themeManager.settings.primaryColor,
-                              ),
-                            )
-                                : Icon(
-                              Icons.speed_rounded,
-                              color: _themeManager.settings.primaryColor,
-                              size: 22,
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Список серверов
-              Expanded(
-                child: Consumer2<VpnController, PingManager>(
-                  builder: (context, controller, pingManager, _) {
-                    final servers = _searchController.text.isNotEmpty
-                        ? controller.searchResults
-                        : controller.allServers;
-
-                    if (servers.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _searchController.text.isEmpty ? Icons.dns_outlined : Icons.search_off,
-                              size: 64,
-                              color: Colors.white.withAlpha(77),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchController.text.isEmpty
-                                  ? 'Нет серверов'
-                                  : 'Серверы не найдены',
-                              style: TextStyle(
-                                color: Colors.white.withAlpha(128),
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 16),
-                      itemCount: servers.length,
-                      cacheExtent: 500,
-                      itemBuilder: (context, index) {
-                        final server = servers[index];
-                        final isSelected = server.id == controller.selectedServer?.id;
-                        final isConnected = isSelected && controller.isConnected;
-                        final pingResult = pingManager.getPingResult(server);
-                        final isPinging = _serverPingingState[server.id] ?? false;
-
-                        return ServerListItem(
-                          key: ValueKey(server.id),
-                          server: server,
-                          isSelected: isSelected,
-                          isConnected: isConnected,
-                          pingResult: pingResult,
-                          isPinging: isPinging,
-                          isAnyServerConnected: controller.isConnected,
-                          onTap: () => controller.selectServer(server),
-                          onFavoriteToggle: () => controller.toggleFavorite(server.id),
-                          onPing: () => _pingServer(server),
-                          onDelete: () async {
-                            await controller.deleteServer(server.id);
-                            if (mounted) {
-                              CustomNotification.show(
-                                context,
-                                message: 'Сервер удален',
-                                type: NotificationType.success,
-                              );
-                            }
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Правая колонка - панель управления (на всю высоту)
-        Container(
-          width: 280,
-          decoration: BoxDecoration(
-            color: _themeManager.settings.accentColor.withAlpha(77), // 0.3 opacity
-            border: Border(
-              left: BorderSide(
-                color: Colors.white.withAlpha(13), // 0.05 opacity
-                width: 1,
-              ),
-            ),
-          ),
-          child: Column(
-            children: [
-              // Пустое пространство сверху для центрирования кнопки
-              const Spacer(),
-
-              // Кнопка питания (в центре)
-              Consumer<VpnController>(
-                builder: (context, controller, _) => PowerButton(
-                  isConnected: controller.isConnected,
-                  isConnecting: controller.isConnecting,
-                  onTap: controller.toggleConnection,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Информация о выбранном сервере (под кнопкой)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Consumer<VpnController>(
-                  builder: (context, controller, _) {
-                    if (controller.selectedServer == null) {
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _themeManager.settings.accentColor.withAlpha(51), // 0.2 opacity
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withAlpha(26), // 0.1 opacity
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 28,
-                              color: Colors.white.withAlpha(128),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Выберите сервер',
-                              style: TextStyle(
-                                color: Colors.white.withAlpha(128),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final server = controller.selectedServer!;
-                    return Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _themeManager.settings.accentColor.withAlpha(51), // 0.2 opacity
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withAlpha(26), // 0.1 opacity
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            'Выбранный сервер',
-                            style: TextStyle(
-                              color: Colors.white.withAlpha(179),
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            ServerNameUtils.formatForDisplay(
-                              server.displayName,
-                              maxLength: 25,
-                            ),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              // Пустое пространство для отталкивания VPN Mode Switch вниз
-              const Spacer(),
-
-              // VPN Mode Switch (внизу)
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Consumer<VpnController>(
-                  builder: (context, controller, _) => VpnModeSwitch(
-                    currentMode: controller.vpnMode,
-                    tunAvailable: _tunAvailable,
-                    isConnected: controller.isConnected,
-                    onModeChanged: _handleVpnModeSwitch,
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ],

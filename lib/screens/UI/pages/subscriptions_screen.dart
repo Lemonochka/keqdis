@@ -59,7 +59,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: ThemeManager().settings.accentColor,
+          backgroundColor: ThemeManager().getThemeData().colorScheme.background,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text('Добавить подписку'),
           contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
@@ -91,7 +91,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
                   title: const Text('Автообновление'),
                   subtitle: const Text('Обновлять автоматически каждые 12 часов'),
                   value: autoUpdate,
-                  activeColor: ThemeManager().settings.primaryColor,
+                  activeColor: ThemeManager().getThemeData().colorScheme.primary,
                   onChanged: (value) => setDialogState(() => autoUpdate = value),
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -106,7 +106,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: ThemeManager().settings.primaryColor,
+                backgroundColor: ThemeManager().getThemeData().colorScheme.primary,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Добавить'),
@@ -137,41 +137,37 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
           autoUpdate: autoUpdate,
         );
 
-        if (mounted) {
+        CustomNotification.show(
+          context,
+          message: 'Подписка добавлена, загрузка серверов...',
+          type: NotificationType.success,
+        );
+        _loadSubscriptions();
+
+        // Сразу же загружаем серверы из подписки
+        final updateResult = await SubscriptionService.updateSubscriptionServers(subscription);
+
+        if (updateResult.success) {
           CustomNotification.show(
             context,
-            message: 'Подписка добавлена, загрузка серверов...',
+            message: 'Загружено ${updateResult.serverCount} серверов',
             type: NotificationType.success,
           );
           _loadSubscriptions();
-
-          // Сразу же загружаем серверы из подписки
-          final updateResult = await SubscriptionService.updateSubscriptionServers(subscription);
-
-          if (updateResult.success) {
-            CustomNotification.show(
-              context,
-              message: 'Загружено ${updateResult.serverCount} серверов',
-              type: NotificationType.success,
-            );
-            _loadSubscriptions();
-            widget.onServersUpdated(); // Обновляем список серверов
-          } else {
-            CustomNotification.show(
-              context,
-              message: 'Ошибка загрузки серверов: ${updateResult.error}',
-              type: NotificationType.warning,
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
+          widget.onServersUpdated(); // Обновляем список серверов
+        } else {
           CustomNotification.show(
             context,
-            message: 'Ошибка: $e',
-            type: NotificationType.error,
+            message: 'Ошибка загрузки серверов: ${updateResult.error}',
+            type: NotificationType.warning,
           );
         }
+      } catch (e) {
+        CustomNotification.show(
+          context,
+          message: 'Ошибка: $e',
+          type: NotificationType.error,
+        );
       }
     }
   }
@@ -250,7 +246,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: ThemeManager().settings.accentColor,
+        backgroundColor: ThemeManager().getThemeData().colorScheme.background,
         title: const Text('Удалить подписку?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -285,23 +281,19 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
         await SubscriptionService.removeSubscriptionServers(subscription);
         await SubscriptionService.deleteSubscription(subscription.id);
 
-        if (mounted) {
-          CustomNotification.show(
-            context,
-            message: 'Подписка удалена',
-            type: NotificationType.success,
-          );
-          _loadSubscriptions();
-          widget.onServersUpdated();
-        }
+        CustomNotification.show(
+          context,
+          message: 'Подписка удалена',
+          type: NotificationType.success,
+        );
+        _loadSubscriptions();
+        widget.onServersUpdated();
       } catch (e) {
-        if (mounted) {
-          CustomNotification.show(
-            context,
-            message: 'Ошибка: $e',
-            type: NotificationType.error,
-          );
-        }
+        CustomNotification.show(
+          context,
+          message: 'Ошибка: $e',
+          type: NotificationType.error,
+        );
       }
     }
   }
@@ -312,13 +304,11 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
       await SubscriptionService.updateSubscription(updated);
       _loadSubscriptions();
     } catch (e) {
-      if (mounted) {
-        CustomNotification.show(
-          context,
-          message: 'Ошибка: $e',
-          type: NotificationType.error,
-        );
-      }
+      CustomNotification.show(
+        context,
+        message: 'Ошибка: $e',
+        type: NotificationType.error,
+      );
     }
   }
 
@@ -342,7 +332,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: themeManager.settings.primaryColor,
+                  color: themeManager.getThemeData().colorScheme.primary,
                 ),
               ),
               const Spacer(),
@@ -410,7 +400,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
                 final isUpdating = _updatingSubscriptions[subscription.id] ?? false;
 
                 return Card(
-                  color: themeManager.settings.accentColor.withOpacity(0.3),
+                  color: themeManager.getThemeData().colorScheme.background.withOpacity(0.3),
                   margin: const EdgeInsets.only(bottom: 12),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -520,7 +510,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
                               value: subscription.autoUpdate,
                               onChanged: (value) =>
                                   _toggleAutoUpdate(subscription, value),
-                              activeColor: themeManager.settings.primaryColor,
+                              activeColor: themeManager.getThemeData().colorScheme.primary,
                             ),
                           ],
                         ),

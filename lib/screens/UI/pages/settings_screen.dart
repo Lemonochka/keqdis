@@ -58,13 +58,11 @@ class _SettingsViewState extends State<SettingsView> {
 
     widget.onSettingsChanged?.call();
 
-    if (mounted) {
-      CustomNotification.show(
-        context,
-        message: 'Локальный порт сохранен. Переподключитесь для применения.',
-        type: NotificationType.success,
-      );
-    }
+    CustomNotification.show(
+      context,
+      message: 'Локальный порт сохранен. Переподключитесь для применения.',
+      type: NotificationType.success,
+    );
   }
 
   Widget _buildMenuCard(
@@ -75,12 +73,12 @@ class _SettingsViewState extends State<SettingsView> {
       ) {
     final themeManager = ThemeManager();
     return Card(
-      color: themeManager.settings.accentColor.withAlpha(77),
+      color: themeManager.getThemeData().colorScheme.background.withAlpha(77),
       child: ListTile(
-        leading: Icon(icon, color: themeManager.settings.primaryColor, size: 32),
+        leading: Icon(icon, color: themeManager.getThemeData().colorScheme.primary, size: 32),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        trailing: Icon(Icons.arrow_forward_ios, color: themeManager.settings.secondaryColor),
+        trailing: Icon(Icons.arrow_forward_ios, color: themeManager.getThemeData().colorScheme.secondary),
         onTap: onTap,
       ),
     );
@@ -106,13 +104,13 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: themeManager.settings.primaryColor,
+                color: themeManager.getThemeData().colorScheme.primary,
               ),
             ),
             const SizedBox(height: 16),
 
             Card(
-              color: themeManager.settings.accentColor.withAlpha(77),
+              color: themeManager.getThemeData().colorScheme.background.withAlpha(77),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -147,7 +145,7 @@ class _SettingsViewState extends State<SettingsView> {
                         ElevatedButton(
                           onPressed: _savePort,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: themeManager.settings.primaryColor,
+                            backgroundColor: themeManager.getThemeData().colorScheme.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                           ),
@@ -174,7 +172,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: themeManager.settings.primaryColor,
+                color: themeManager.getThemeData().colorScheme.primary,
               ),
             ),
             const SizedBox(height: 16),
@@ -225,7 +223,7 @@ class _SettingsViewState extends State<SettingsView> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: themeManager.settings.primaryColor,
+                color: themeManager.getThemeData().colorScheme.primary,
               ),
             ),
             const SizedBox(height: 16),
@@ -234,7 +232,7 @@ class _SettingsViewState extends State<SettingsView> {
               animation: themeManager,
               builder: (context, child) {
                 return Card(
-                  color: themeManager.settings.accentColor.withAlpha(128),
+                  color: themeManager.getThemeData().colorScheme.background.withAlpha(128),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -277,7 +275,7 @@ class _SettingsViewState extends State<SettingsView> {
                             max: 0.9,
                             divisions: 8,
                             label: '${(themeManager.settings.backgroundOpacity * 100).round()}%',
-                            activeColor: themeManager.settings.primaryColor,
+                            activeColor: themeManager.getThemeData().colorScheme.primary,
                             onChanged: (value) {
                               themeManager.updateOpacity(value);
                             },
@@ -294,7 +292,7 @@ class _SettingsViewState extends State<SettingsView> {
                             max: 30,
                             divisions: 30,
                             label: themeManager.settings.blurIntensity.round().toString(),
-                            activeColor: themeManager.settings.primaryColor,
+                            activeColor: themeManager.getThemeData().colorScheme.primary,
                             onChanged: (value) {
                               themeManager.updateBlur(value);
                             },
@@ -321,8 +319,8 @@ class _SettingsViewState extends State<SettingsView> {
                                 : "Выбрать фоновое изображение"
                             ),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: themeManager.settings.primaryColor,
-                              side: BorderSide(color: themeManager.settings.primaryColor),
+                              foregroundColor: themeManager.getThemeData().colorScheme.primary,
+                              side: BorderSide(color: themeManager.getThemeData().colorScheme.primary),
                               padding: const EdgeInsets.all(16),
                             ),
                           ),
@@ -407,12 +405,12 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
 
   Widget _buildSwitch(String title, String subtitle, bool value, Function(bool) onChanged) {
     return Card(
-      color: ThemeManager().settings.accentColor.withAlpha(77),
+      color: ThemeManager().getThemeData().colorScheme.background.withAlpha(77),
       child: SwitchListTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
         value: value,
-        activeColor: ThemeManager().settings.primaryColor,
+        activeColor: ThemeManager().getThemeData().colorScheme.primary,
         onChanged: onChanged,
       ),
     );
@@ -435,7 +433,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
           Column(
             children: [
               AppBar(
-                backgroundColor: themeManager.settings.accentColor.withAlpha(230),
+                backgroundColor: themeManager.getThemeData().colorScheme.background.withAlpha(230),
                 title: const Text('Поведение приложения'),
               ),
               Expanded(
@@ -652,7 +650,7 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
           Column(
             children: [
               AppBar(
-                backgroundColor: themeManager.settings.accentColor.withAlpha(230),
+                backgroundColor: themeManager.getThemeData().colorScheme.background.withAlpha(230),
                 title: const Text('Настройки маршрутизации'),
               ),
               Expanded(
@@ -700,7 +698,7 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
                       child: ElevatedButton(
                         onPressed: _saveRoutingSettings,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: themeManager.settings.primaryColor,
+                          backgroundColor: themeManager.getThemeData().colorScheme.primary,
                           foregroundColor: Colors.white,
                           textStyle: const TextStyle(
                             fontSize: 16,
@@ -841,7 +839,7 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
           Column(
             children: [
               AppBar(
-                backgroundColor: themeManager.settings.accentColor.withAlpha(230),
+                backgroundColor: themeManager.getThemeData().colorScheme.background.withAlpha(230),
                 title: const Text('Настройки пинга'),
               ),
               Expanded(
@@ -855,12 +853,12 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: themeManager.settings.primaryColor,
+                        color: themeManager.getThemeData().colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 16),
                     Card(
-                      color: themeManager.settings.accentColor.withAlpha(77),
+                      color: themeManager.getThemeData().colorScheme.background.withAlpha(77),
                       child: Column(
                         children: [
                           RadioListTile<String>(
@@ -872,7 +870,7 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
                             ),
                             value: 'tcp',
                             groupValue: _pingType,
-                            activeColor: themeManager.settings.primaryColor,
+                            activeColor: themeManager.getThemeData().colorScheme.primary,
                             onChanged: (value) {
                               setState(() => _pingType = value!);
                               _savePingSettings(value!);
@@ -888,7 +886,7 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
                             ),
                             value: 'proxy',
                             groupValue: _pingType,
-                            activeColor: themeManager.settings.primaryColor,
+                            activeColor: themeManager.getThemeData().colorScheme.primary,
                             onChanged: (value) {
                               setState(() => _pingType = value!);
                               _savePingSettings(value!);

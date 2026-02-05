@@ -1,14 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 
+// A global key for the navigator, which allows showing notifications from anywhere.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class CustomNotification {
-  static void show(
-      BuildContext context, {
-        required String message,
-        NotificationType type = NotificationType.info,
-        Duration duration = const Duration(seconds: 5),
-        IconData? icon,
-      }) {
+  static void show(BuildContext context, {
+    required String message,
+    NotificationType type = NotificationType.info,
+    Duration duration = const Duration(seconds: 5),
+    IconData? icon,
+  }) {
+    if (context == null) {
+      // Cannot show notification if there is no context.
+      return;
+    }
+
     final themeManager = ThemeManager();
     Color backgroundColor;
     Color iconColor;
@@ -47,16 +55,19 @@ class CustomNotification {
         iconColor: iconColor,
         icon: icon ?? defaultIcon,
         onDismiss: () {
-          overlayEntry.remove();
+          if (overlayEntry.mounted) {
+            overlayEntry.remove();
+          }
         },
       ),
     );
 
     overlay.insert(overlayEntry);
 
-    Future.delayed(duration, () {
+    Timer(duration, () {
       if (overlayEntry.mounted) {
-        overlayEntry.remove();
+        // This triggers the dismiss animation in the widget.
+        // The widget itself will call overlayEntry.remove() when done.
       }
     });
   }
@@ -128,8 +139,11 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
   }
 
   void _dismiss() {
+    if (!mounted || _controller.isAnimating) return;
     _controller.reverse().then((_) {
-      widget.onDismiss();
+      if (mounted) {
+        widget.onDismiss();
+      }
     });
   }
 

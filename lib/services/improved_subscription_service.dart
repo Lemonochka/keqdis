@@ -19,56 +19,47 @@ class UpdateResult {
 }
 
 class SubscriptionService {
+  static final _ipPatterns = [
+    RegExp(r'^10\.'),
+    RegExp(r'^172\.(1[6-9]|2[0-9]|3[01])\.'),
+    RegExp(r'^192\.168\.'),
+    RegExp(r'^169\.254\.'),
+    RegExp(r'^fc00:'),
+    RegExp(r'^fe80:'),
+  ];
+
   static bool _isSafeUrl(String url) {
     try {
+      if (url.length > 2048) {
+        return false;
+      }
+
       final uri = Uri.parse(url);
 
-      // Проверка, только HTTP/HTTPS
       if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
         return false;
       }
 
-      // Проверка наличия хоста
       if (uri.host.isEmpty) {
         return false;
       }
 
-      // Блокировка локальных адресов
       final host = uri.host.toLowerCase();
 
-      // Блокируем localhost
       if (host == 'localhost' ||
           host == '127.0.0.1' ||
           host.startsWith('127.') ||
           host == '0.0.0.0' ||
-          host == '::1') {
+          host == '::1' ||
+          host == '169.254.169.254' ||
+          host.contains('metadata')) {
         return false;
       }
 
-      // Блокируем локальные сети
-      final ipPatterns = [
-        RegExp(r'^10\.'),
-        RegExp(r'^172\.(1[6-9]|2[0-9]|3[01])\.'),
-        RegExp(r'^192\.168\.'),
-        RegExp(r'^169\.254\.'),
-        RegExp(r'^fc00:'),
-        RegExp(r'^fe80:'),
-      ];
-
-      for (final pattern in ipPatterns) {
+      for (final pattern in _ipPatterns) {
         if (pattern.hasMatch(host)) {
           return false;
         }
-      }
-
-      // Блокируем metadata endpoints
-      if (host == '169.254.169.254' || host.contains('metadata')) {
-        return false;
-      }
-
-      // Длина URL не должна превышать разумных пределов
-      if (url.length > 2048) {
-        return false;
       }
 
       return true;
@@ -77,30 +68,25 @@ class SubscriptionService {
     }
   }
 
-  /// Загрузить подписки
   static Future<List<Subscription>> loadSubscriptions() async {
-    return await UnifiedStorage.loadSubscriptions();
+    return await UnifiedStorage.getSubscriptions();
   }
 
-  /// Сохранить подписки
   static Future<void> saveSubscriptions(List<Subscription> subscriptions) async {
-    await UnifiedStorage.saveSubscriptions(subscriptions);
+    // This method is no longer needed as UnifiedStorage handles saving internally.
   }
 
-  /// Добавить подписку
   static Future<Subscription> addSubscription({
     required String name,
     required String url,
     bool autoUpdate = true,
   }) async {
-    // Валидация URL
     if (!_isValidUrl(url)) {
-      throw Exception('Некорректный URL подписки');
+      throw ArgumentError('Некорректный URL подписки');
     }
 
-    // БЕЗОПАСНОСТЬ: Проверка на SSRF
     if (!_isSafeUrl(url)) {
-      throw SecurityException('Запрещенный URL: попытка доступа к локальным ресурсам');
+      throw Exception('Запрещенный URL: попытка доступа к локальным ресурсам');
     }
 
     return await UnifiedStorage.addSubscription(
@@ -110,35 +96,26 @@ class SubscriptionService {
     );
   }
 
-  /// Удалить подписку
   static Future<void> deleteSubscription(String id) async {
     await UnifiedStorage.deleteSubscription(id);
   }
 
-  /// Обновить подписку
   static Future<Subscription> updateSubscription(Subscription subscription) async {
     return await UnifiedStorage.updateSubscription(subscription);
   }
 
-  /// Валидация URL
   static bool _isValidUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      return uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https');
-    } catch (e) {
-      return false;
-    }
+    final uri = Uri.tryParse(url);
+    return uri != null && uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https');
   }
 
-  /// Скачать серверы из подписки
   static Future<List<String>> fetchServersFromSubscription(
       String url, {
         Duration timeout = const Duration(seconds: 30),
       }) async {
     try {
-      // БЕЗОПАСНОСТЬ: Проверка URL перед запросом
       if (!_isSafeUrl(url)) {
-        throw SecurityException('Запрещенный URL: попытка доступа к локальным ресурсам');
+        throw Exception('Запрещенный URL: попытка доступа к локальным ресурсам');
       }
 
       final response = await http.get(
@@ -151,10 +128,9 @@ class SubscriptionService {
       ).timeout(timeout);
 
       if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
+        throw HttpException('HTTP ${response.statusCode}: ${response.reasonPhrase}');
       }
 
-      // БЕЗОПАСНОСТЬ: Проверка размера ответа (защита от DoS)
       if (response.contentLength != null && response.contentLength! > 10 * 1024 * 1024) {
         throw Exception('Ответ слишком большой (максимум 10MB)');
       }
@@ -173,32 +149,26 @@ class SubscriptionService {
       throw Exception('Превышено время ожидания');
     } on HttpException catch (e) {
       throw Exception('HTTP ошибка: ${e.message}');
-    } on SecurityException {
-      rethrow;
+    } on FormatException catch (e) {
+      throw Exception('Ошибка формата данных: ${e.message}');
     } catch (e) {
       throw Exception('Не удалось загрузить подписку: ${e.toString()}');
     }
   }
 
-  /// Парсинг содержимого подписки
   static List<String> _parseSubscriptionContent(String content) {
     final servers = <String>[];
 
     try {
       String decodedContent;
 
-      // Пробуем декодировать из base64
       try {
-        final trimmed = content.trim();
-        final cleaned = trimmed.replaceAll(RegExp(r'\s'), '');
-        decodedContent = utf8.decode(base64.decode(cleaned));
-      } catch (e) {
-        decodedContent = content;
+        decodedContent = utf8.decode(base64.decode(content.trim()));
+      } on FormatException {
+        decodedContent = content; // Not a base64 string, assume plain text
       }
 
-      // Парсим строки
-      final lines = decodedContent
-          .split('\n')
+      final lines = LineSplitter.split(decodedContent)
           .map((line) => line.trim())
           .where((line) => line.isNotEmpty);
 
@@ -208,6 +178,8 @@ class SubscriptionService {
         }
       }
 
+    } on FormatException catch(e) {
+       throw FormatException('Не удалось распознать содержимое подписки: ${e.message}');
     } catch (e) {
       throw Exception('Не удалось распарсить подписку');
     }
@@ -215,7 +187,6 @@ class SubscriptionService {
     return servers;
   }
 
-  /// Проверка валидности конфига сервера
   static bool _isValidServerConfig(String config) {
     return config.startsWith('vless://') ||
         config.startsWith('vmess://') ||
@@ -224,22 +195,18 @@ class SubscriptionService {
         config.startsWith('ssr://');
   }
 
-  /// Обновить серверы подписки
   static Future<UpdateResult> updateSubscriptionServers(
       Subscription subscription,
       ) async {
     try {
-      // Скачиваем новые серверы
       final newServers = await fetchServersFromSubscription(subscription.url);
 
-      // Обновляем серверы в хранилище
       await UnifiedStorage.updateSubscriptionServers(
         subscriptionId: subscription.id,
         subscriptionName: subscription.name,
         newConfigs: newServers,
       );
 
-      // Обновляем метаданные подписки
       final updatedSubscription = subscription.copyWith(
         lastUpdated: DateTime.now(),
         serverCount: newServers.length,
@@ -262,22 +229,23 @@ class SubscriptionService {
     }
   }
 
-  /// Обновить все подписки с автообновлением
   static Future<List<UpdateResult>> updateAllSubscriptions() async {
     final subscriptions = await loadSubscriptions();
-    final results = <UpdateResult>[];
+    final tasks = <Future<UpdateResult>>[];
 
     for (final subscription in subscriptions) {
       if (subscription.autoUpdate) {
-        results.add(await updateSubscriptionServers(subscription));
-        await Future.delayed(const Duration(milliseconds: 500));
+        tasks.add(updateSubscriptionServers(subscription));
       }
     }
 
-    return results;
+    final results = await Future.wait(tasks.map((task) => task.catchError((e) {
+      return UpdateResult(success: false, error: e.toString(), subscription: Subscription(id: 'unknown', name: 'unknown', url: '', lastUpdated: DateTime.now()));
+    })));
+
+    return results.whereType<UpdateResult>().toList();
   }
 
-  /// Получить подписки, которые нужно обновить
   static Future<List<Subscription>> getSubscriptionsDueForUpdate({
     Duration interval = const Duration(hours: 12),
   }) async {
@@ -290,7 +258,6 @@ class SubscriptionService {
     }).toList();
   }
 
-  /// Удалить серверы подписки (используется при удалении подписки)
   static Future<void> removeSubscriptionServers(Subscription subscription) async {
     await UnifiedStorage.deleteSubscription(subscription.id);
   }

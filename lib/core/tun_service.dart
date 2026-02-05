@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as path;
 
@@ -12,8 +12,7 @@ class TunService {
   static const String _wintunDllName = 'wintun.dll';
 
   static Future<bool> isTunAvailable() async {
-    // TUN режим поддерживается только в Windows. UI обработает проверку прав администратора,
-    // когда пользователь попытается его включить.
+    // TUN mode is only supported on Windows.
     return Platform.isWindows;
   }
 
@@ -24,10 +23,10 @@ class TunService {
 
     try {
       final data = await rootBundle.load('assets/bin/$_wintunDllName');
-      final bytes = data.buffer.asUint8List();
-      await dllFile.writeAsBytes(bytes, flush: true);
-    } catch (e) {
-      // Не удалось подготовить wintun.dll
+      await dllFile.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    } catch (e, s) {
+      debugPrint('Failed to prepare $_wintunDllName: $e\n$s');
+      throw Exception('Failed to prepare $_wintunDllName. TUN mode will not work.');
     }
   }
 
@@ -36,14 +35,12 @@ class TunService {
       return false;
     }
     try {
-      // Это более надежный способ проверки прав администратора.
-      // Команда 'net session' может вводить в заблуждение.
-      // Мы пытаемся выполнить команду, требующую повышения прав.
+      // Running 'fltmc filters' requires elevation and is a reliable way
+      // to check for admin rights without making permanent system changes.
       final result = await Process.run('fltmc', ['filters'], runInShell: true);
-      // Код выхода 0 означает успех. Любой другой код означает неудачу.
       return result.exitCode == 0;
-    } catch (e) {
-      // Если команду не удается выполнить, предполагаем, что права администратора отсутствуют.
+    } catch (e, s) {
+      debugPrint('Admin rights check failed: $e\n$s');
       return false;
     }
   }
@@ -69,35 +66,50 @@ class TunService {
 
   static Future<String> getActiveInterfaceIp() async {
     try {
-      const psCommand = r'Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Virtual -eq $false -and $_.InterfaceDescription -notlike "*TAP*" -and $_.InterfaceDescription -notlike "*Hyper-V*" } | Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress -First 1';
-
-      final result = await Process.run(
-        'powershell',
-        ['-NoProfile', '-Command', psCommand],
-        runInShell: true,
+      // Use Dart's native NetworkInterface to avoid spawning a process.
+      // This is much more efficient and platform-agnostic.
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
       );
+      
+      // Prefer interfaces that are likely physical connections.
+      final preferredInterfaces = interfaces.where((iface) {
+        final name = iface.name.toLowerCase();
+        return name.contains('ethernet') || name.contains('wi-fi') || name.contains('wlan');
+      });
 
-      final ip = result.stdout.toString().trim();
+      final potentialInterfaces = preferredInterfaces.isNotEmpty ? preferredInterfaces : interfaces;
 
-      if (ip.isNotEmpty && ip.split('.').length == 4) {
-        return ip;
+      for (final interface in potentialInterfaces) {
+        for (final addr in interface.addresses) {
+          // Filter out link-local addresses.
+          if (!addr.isLinkLocal) {
+            return addr.address;
+          }
+        }
       }
-
-      return '';
-    } catch (e) {
-      return '';
+    } catch (e, s) {
+      debugPrint('Could not get active IP address: $e\n$s');
     }
+    return ''; // Fallback
   }
 
+  // These methods are placeholders. Routing is handled by xray-core's
+  // 'autoRoute: true' setting in the TUN inbound configuration.
   static Future<bool> addTunRoute() async => true;
   static Future<void> removeTunRoute() async {}
+
   static Future<bool> requestAdminRights() async {
-    if (kDebugMode) return false;
+    if (kDebugMode || !Platform.isWindows) return false;
     final exe = Platform.resolvedExecutable;
     try {
-      await Process.run('powershell', ['Start-Process', '"$exe"', '-Verb', 'RunAs']);
+      await Process.start('powershell', ['Start-Process', '"$exe"', '-Verb', 'RunAs'], runInShell: true, mode: ProcessStartMode.detached);
+      // We can't be certain it succeeded, but we have requested it.
+      // The app will likely restart.
       return true;
-    } catch (e) {
+    } catch (e, s) {
+      debugPrint('Failed to request admin rights: $e\n$s');
       return false;
     }
   }
