@@ -1,11 +1,12 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'service.dart';
 import '../utils/config_gen.dart';
 import 'system_proxy.dart';
 import '../storages/improved_settings_storage.dart';
 import 'tun_service.dart';
 
-class CoreManager {
+class CoreManager extends ChangeNotifier {
   final _xrayService = VpnService();
   final _singboxService = VpnService();
 
@@ -40,7 +41,7 @@ class CoreManager {
             resolvedConfigInput = configInput.replaceFirst(host, serverIpToExclude);
           }
         } catch (e) {
-          throw Exception('Не удалось отрезолвить домен сервера. Проверьте интернет-соединение.');
+          throw Exception('Не удалось резолвить домен сервера.');
         }
       } else if (isIp) {
         serverIpToExclude = host;
@@ -76,6 +77,7 @@ class CoreManager {
     }
 
     _currentMode = mode;
+    notifyListeners();
   }
 
   Future<void> switchMode(String configInput, VpnMode newMode) async {
@@ -87,6 +89,7 @@ class CoreManager {
   }
 
   Future<void> stop() async {
+    final wasRunning = isRunning;
     if (_singboxService.isRunning) {
       await _singboxService.stop();
     }
@@ -95,5 +98,8 @@ class CoreManager {
     }
 
     await SystemProxy.clearProxy();
+    if (wasRunning) {
+      notifyListeners();
+    }
   }
 }

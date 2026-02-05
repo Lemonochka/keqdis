@@ -1,19 +1,12 @@
-import 'dart:ui';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
-import 'core/core_manager.dart';
-import 'storages/unified_storage.dart';
 import 'storages/improved_settings_storage.dart';
-import 'core/system_proxy.dart';
-import 'services/tray_service.dart';
 import 'services/autostart_service.dart';
 import 'screens/improved_theme_manager.dart';
-import 'services/improved_subscription_service.dart';
 import 'utils/single_instance_manager.dart';
-import 'screens/UI/main_ui.dart';
+import 'screens/UI/pages/home_screen_optimized.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +28,7 @@ void main() async {
     }
 
     exit(0);
-    return;
+///    return;
   }
 
   try {
@@ -94,7 +87,7 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           theme: ThemeManager().getThemeData(),
           debugShowCheckedModeBanner: false,
-          home: MainShell(isAutoStarted: isAutoStarted),
+          home: HomeScreen(isAutoStarted: isAutoStarted),
         );
       },
     );

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../improved_theme_manager.dart';
+import 'package:keqdis/screens/improved_theme_manager.dart';
 
 class CustomNotification {
   static void show(

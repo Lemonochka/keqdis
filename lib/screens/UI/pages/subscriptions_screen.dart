@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../improved_theme_manager.dart';
-import '../../services/improved_subscription_service.dart';
-import 'custom_notification.dart';
-import '../../storages/unified_storage.dart';
+import 'package:keqdis/screens/improved_theme_manager.dart';
+import 'package:keqdis/services/improved_subscription_service.dart';
+import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
+import 'package:keqdis/storages/unified_storage.dart';
 
 class SubscriptionsView extends StatefulWidget {
   final VoidCallback onServersUpdated;

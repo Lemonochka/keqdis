@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../improved_theme_manager.dart';
-import '../../storages/improved_settings_storage.dart';
-import 'custom_notification.dart';
+import 'package:keqdis/screens/improved_theme_manager.dart';
+import 'package:keqdis/storages/improved_settings_storage.dart';
+import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
 
 class ImprovedRoutingSettingsPage extends StatefulWidget {
   final VoidCallback? onSettingsChanged;

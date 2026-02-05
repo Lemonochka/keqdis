@@ -12,8 +12,9 @@ class TunService {
   static const String _wintunDllName = 'wintun.dll';
 
   static Future<bool> isTunAvailable() async {
-    if (!Platform.isWindows) return false;
-    return await hasAdminRights();
+    // TUN режим поддерживается только в Windows. UI обработает проверку прав администратора,
+    // когда пользователь попытается его включить.
+    return Platform.isWindows;
   }
 
   static Future<void> prepareWintunDll(String xrayDir) async {
@@ -26,15 +27,23 @@ class TunService {
       final bytes = data.buffer.asUint8List();
       await dllFile.writeAsBytes(bytes, flush: true);
     } catch (e) {
-      // Failed to prepare wintun.dll
+      // Не удалось подготовить wintun.dll
     }
   }
 
   static Future<bool> hasAdminRights() async {
+    if (!Platform.isWindows) {
+      return false;
+    }
     try {
-      final result = await Process.run('net', ['session'], runInShell: true);
+      // Это более надежный способ проверки прав администратора.
+      // Команда 'net session' может вводить в заблуждение.
+      // Мы пытаемся выполнить команду, требующую повышения прав.
+      final result = await Process.run('fltmc', ['filters'], runInShell: true);
+      // Код выхода 0 означает успех. Любой другой код означает неудачу.
       return result.exitCode == 0;
     } catch (e) {
+      // Если команду не удается выполнить, предполагаем, что права администратора отсутствуют.
       return false;
     }
   }

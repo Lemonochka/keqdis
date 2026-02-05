@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../improved_theme_manager.dart';
-import '../../storages/improved_settings_storage.dart';
-import '../../services/autostart_service.dart';
-import 'custom_notification.dart';
+import 'package:keqdis/screens/improved_theme_manager.dart';
+import 'package:keqdis/storages/improved_settings_storage.dart';
+import 'package:keqdis/services/autostart_service.dart';
+import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
 import 'improved_routing_settings.dart';
 
 class SettingsView extends StatefulWidget {
@@ -75,7 +75,7 @@ class _SettingsViewState extends State<SettingsView> {
       ) {
     final themeManager = ThemeManager();
     return Card(
-      color: themeManager.settings.accentColor.withOpacity(0.3),
+      color: themeManager.settings.accentColor.withAlpha(77),
       child: ListTile(
         leading: Icon(icon, color: themeManager.settings.primaryColor, size: 32),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -112,7 +112,7 @@ class _SettingsViewState extends State<SettingsView> {
             const SizedBox(height: 16),
 
             Card(
-              color: themeManager.settings.accentColor.withOpacity(0.3),
+              color: themeManager.settings.accentColor.withAlpha(77),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -132,9 +132,9 @@ class _SettingsViewState extends State<SettingsView> {
                             style: const TextStyle(fontSize: 14),
                             decoration: InputDecoration(
                               hintText: "Например: 2080",
-                              hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+                              hintStyle: TextStyle(color: Colors.white.withAlpha(51)),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.05),
+                              fillColor: Colors.white.withAlpha(13),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide.none,
@@ -234,7 +234,7 @@ class _SettingsViewState extends State<SettingsView> {
               animation: themeManager,
               builder: (context, child) {
                 return Card(
-                  color: themeManager.settings.accentColor.withOpacity(0.5),
+                  color: themeManager.settings.accentColor.withAlpha(128),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -270,7 +270,7 @@ class _SettingsViewState extends State<SettingsView> {
                           ),
                           const SizedBox(height: 16),
 
-                          Text("Прозрачность фона", style: TextStyle(color: Colors.white.withOpacity(0.7))),
+                          Text("Прозрачность фона", style: TextStyle(color: Colors.white.withAlpha(179))),
                           Slider(
                             value: themeManager.settings.backgroundOpacity,
                             min: 0.1,
@@ -287,7 +287,7 @@ class _SettingsViewState extends State<SettingsView> {
                           ),
 
                           const SizedBox(height: 8),
-                          Text("Размытие фона", style: TextStyle(color: Colors.white.withOpacity(0.7))),
+                          Text("Размытие фона", style: TextStyle(color: Colors.white.withAlpha(179))),
                           Slider(
                             value: themeManager.settings.blurIntensity,
                             min: 0,
@@ -407,7 +407,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
 
   Widget _buildSwitch(String title, String subtitle, bool value, Function(bool) onChanged) {
     return Card(
-      color: ThemeManager().settings.accentColor.withOpacity(0.3),
+      color: ThemeManager().settings.accentColor.withAlpha(77),
       child: SwitchListTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
@@ -428,33 +428,14 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
           // Кастомный фон
           if (themeManager.hasCustomBackground)
             Positioned.fill(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.file(
-                    File(themeManager.settings.backgroundImagePath!),
-                    fit: BoxFit.cover,
-                  ),
-                  BackdropFilter(
-                    filter: ImageFilter.blur(
-                      sigmaX: themeManager.settings.blurIntensity,
-                      sigmaY: themeManager.settings.blurIntensity,
-                    ),
-                    child: Container(
-                      color: Colors.black.withOpacity(
-                          1.0 - themeManager.settings.backgroundOpacity
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildOptimizedBackground(context, themeManager),
             ),
 
           // Контент
           Column(
             children: [
               AppBar(
-                backgroundColor: themeManager.settings.accentColor.withOpacity(0.9),
+                backgroundColor: themeManager.settings.accentColor.withAlpha(230),
                 title: const Text('Поведение приложения'),
               ),
               Expanded(
@@ -509,6 +490,47 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOptimizedBackground(BuildContext context, ThemeManager themeManager) {
+    final path = themeManager.settings.backgroundImagePath!;
+    final imageProvider = FileImage(File(path));
+
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+
+    final resizedImageProvider = ResizeImage(
+      imageProvider,
+      width: screenWidth,
+      height: screenHeight,
+    );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image(
+          image: resizedImageProvider,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('Ошибка загрузки фонового изображения: $error');
+            Future.microtask(() => themeManager.removeBackground());
+            return Container(color: const Color(0xFF0A0E27));
+          },
+        ),
+        BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: themeManager.settings.blurIntensity,
+            sigmaY: themeManager.settings.blurIntensity,
+          ),
+          child: Container(
+            color: Colors.black.withAlpha(
+              ((1.0 - themeManager.settings.backgroundOpacity) * 255).round(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -599,9 +621,9 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
           style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+            hintStyle: TextStyle(color: Colors.white.withAlpha(51)),
             filled: true,
-            fillColor: Colors.white.withOpacity(0.05),
+            fillColor: Colors.white.withAlpha(13),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -623,33 +645,14 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
           // Кастомный фон
           if (themeManager.hasCustomBackground)
             Positioned.fill(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.file(
-                    File(themeManager.settings.backgroundImagePath!),
-                    fit: BoxFit.cover,
-                  ),
-                  BackdropFilter(
-                    filter: ImageFilter.blur(
-                      sigmaX: themeManager.settings.blurIntensity,
-                      sigmaY: themeManager.settings.blurIntensity,
-                    ),
-                    child: Container(
-                      color: Colors.black.withOpacity(
-                          1.0 - themeManager.settings.backgroundOpacity
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildOptimizedBackground(context, themeManager),
             ),
 
           // Контент
           Column(
             children: [
               AppBar(
-                backgroundColor: themeManager.settings.accentColor.withOpacity(0.9),
+                backgroundColor: themeManager.settings.accentColor.withAlpha(230),
                 title: const Text('Настройки маршрутизации'),
               ),
               Expanded(
@@ -726,6 +729,47 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
       ),
     );
   }
+
+  Widget _buildOptimizedBackground(BuildContext context, ThemeManager themeManager) {
+    final path = themeManager.settings.backgroundImagePath!;
+    final imageProvider = FileImage(File(path));
+
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+
+    final resizedImageProvider = ResizeImage(
+      imageProvider,
+      width: screenWidth,
+      height: screenHeight,
+    );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image(
+          image: resizedImageProvider,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('Ошибка загрузки фонового изображения: $error');
+            Future.microtask(() => themeManager.removeBackground());
+            return Container(color: const Color(0xFF0A0E27));
+          },
+        ),
+        BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: themeManager.settings.blurIntensity,
+            sigmaY: themeManager.settings.blurIntensity,
+          ),
+          child: Container(
+            color: Colors.black.withAlpha(
+              ((1.0 - themeManager.settings.backgroundOpacity) * 255).round(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // === СТРАНИЦА: НАСТРОЙКИ ПИНГА ===
@@ -790,34 +834,14 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
           // Кастомный фон
           if (themeManager.hasCustomBackground)
             Positioned.fill(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.file(
-                    File(themeManager.settings.backgroundImagePath!),
-                    fit: BoxFit.cover,
-                  ),
-                  BackdropFilter(
-                    filter: ImageFilter.blur(
-                      sigmaX: themeManager.settings.blurIntensity,
-                      sigmaY: themeManager.settings.blurIntensity,
-                    ),
-                    child: Container(
-                      color: Colors.black.withOpacity(
-                          1.0 - themeManager.settings.backgroundOpacity
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildOptimizedBackground(context, themeManager),
             ),
 
           // Контент
           Column(
             children: [
               AppBar(
-                backgroundColor: themeManager.settings.accentColor.withOpacity(
-                    0.9),
+                backgroundColor: themeManager.settings.accentColor.withAlpha(230),
                 title: const Text('Настройки пинга'),
               ),
               Expanded(
@@ -836,7 +860,7 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
                     ),
                     const SizedBox(height: 16),
                     Card(
-                      color: themeManager.settings.accentColor.withOpacity(0.3),
+                      color: themeManager.settings.accentColor.withAlpha(77),
                       child: Column(
                         children: [
                           RadioListTile<String>(
@@ -877,9 +901,9 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withAlpha(26),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        border: Border.all(color: Colors.blue.withAlpha(77)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -914,6 +938,47 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildOptimizedBackground(BuildContext context, ThemeManager themeManager) {
+    final path = themeManager.settings.backgroundImagePath!;
+    final imageProvider = FileImage(File(path));
+
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+
+    final resizedImageProvider = ResizeImage(
+      imageProvider,
+      width: screenWidth,
+      height: screenHeight,
+    );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image(
+          image: resizedImageProvider,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('Ошибка загрузки фонового изображения: $error');
+            Future.microtask(() => themeManager.removeBackground());
+            return Container(color: const Color(0xFF0A0E27));
+          },
+        ),
+        BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: themeManager.settings.blurIntensity,
+            sigmaY: themeManager.settings.blurIntensity,
+          ),
+          child: Container(
+            color: Colors.black.withAlpha(
+              ((1.0 - themeManager.settings.backgroundOpacity) * 255).round(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

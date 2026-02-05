@@ -129,7 +129,7 @@ class PingService {
           server: name,
           latencyMs: stopwatch.elapsedMilliseconds,
           success: false,
-          error: 'Шаг 1 (TLS): HTTP ${res1.statusCode}',
+          error: 'HTTP ${res1.statusCode}',
         );
       }
 
@@ -154,7 +154,7 @@ class PingService {
           server: name,
           latencyMs: stopwatch.elapsedMilliseconds,
           success: false,
-          error: 'Шаг 2 (маршрут): HTTP ${res2.statusCode}',
+          error: 'HTTP ${res2.statusCode}',
         );
       }
     } on SocketException catch (e) {

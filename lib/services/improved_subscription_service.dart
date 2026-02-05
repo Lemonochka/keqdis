@@ -19,12 +19,11 @@ class UpdateResult {
 }
 
 class SubscriptionService {
-  /// БЕЗОПАСНОСТЬ: Проверка на SSRF (Server-Side Request Forgery)
   static bool _isSafeUrl(String url) {
     try {
       final uri = Uri.parse(url);
 
-      // Проверка схемы: только HTTP/HTTPS
+      // Проверка, только HTTP/HTTPS
       if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
         return false;
       }
@@ -34,10 +33,10 @@ class SubscriptionService {
         return false;
       }
 
-      // БЕЗОПАСНОСТЬ: Блокировка локальных адресов (SSRF protection)
+      // Блокировка локальных адресов
       final host = uri.host.toLowerCase();
 
-      // Блокируем localhost и все его варианты
+      // Блокируем localhost
       if (host == 'localhost' ||
           host == '127.0.0.1' ||
           host.startsWith('127.') ||
