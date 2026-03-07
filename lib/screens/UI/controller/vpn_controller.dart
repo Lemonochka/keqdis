@@ -50,6 +50,7 @@ class VpnController extends ChangeNotifier {
           (e) => e.name == settings.lastVpnMode,
       orElse: () => VpnMode.systemProxy,
     );
+    debugPrint('VpnController: Loaded VPN mode: ${_vpnMode.name}');
     notifyListeners();
   }
 
@@ -63,16 +64,15 @@ class VpnController extends ChangeNotifier {
       _selectedServer = potentialServers.isNotEmpty ? potentialServers.first : null;
     }
     _searchResults = [];
+    debugPrint('VpnController: Loaded ${_allServers.length} servers');
     notifyListeners();
   }
 
   void _sortServers() {
     _allServers.sort((a, b) {
-      // Сначала избранные
       if (a.isFavorite && !b.isFavorite) return -1;
       if (!a.isFavorite && b.isFavorite) return 1;
 
-      // Затем по имени
       return a.displayName.compareTo(b.displayName);
     });
   }
@@ -88,28 +88,34 @@ class VpnController extends ChangeNotifier {
         .where((s) => s.displayName.toLowerCase().contains(query.toLowerCase()))
         .toList();
 
-    // Сортируем результаты поиска тоже
     _searchResults.sort((a, b) {
       if (a.isFavorite && !b.isFavorite) return -1;
       if (!a.isFavorite && b.isFavorite) return 1;
       return a.displayName.compareTo(b.displayName);
     });
 
+    debugPrint('VpnController: Search found ${_searchResults.length} servers for "$query"');
     notifyListeners();
   }
 
-
   void selectServer(ServerItem server) {
-    if (_isConnecting || _isConnected) return;
+    if (_isConnecting || _isConnected) {
+      debugPrint('VpnController: Cannot select server while connecting or connected');
+      return;
+    }
 
     _selectedServer = server;
+    debugPrint('VpnController: Selected server: ${server.displayName}');
     notifyListeners();
   }
 
   Future<void> switchVpnMode(VpnMode newMode) async {
     if (_vpnMode == newMode) return;
 
+    debugPrint('VpnController: Switching VPN mode from ${_vpnMode.name} to ${newMode.name}');
     _vpnMode = newMode;
+
+    // Сохраняем выбранный режим
     final settings = await SettingsStorage.loadSettings();
     await SettingsStorage.saveSettings(AppSettings(
       localPort: settings.localPort,
@@ -122,18 +128,23 @@ class VpnController extends ChangeNotifier {
       startMinimized: settings.startMinimized,
       pingType: settings.pingType,
       autoConnectLastServer: settings.autoConnectLastServer,
-      lastVpnMode: newMode.name,
+      lastVpnMode: newMode.name, // ✅ Сохраняем режим
     ));
+
     notifyListeners();
 
     if (_isConnected) {
+      debugPrint('VpnController: Reconnecting with new VPN mode...');
       await disconnect();
       await connect();
     }
   }
 
   Future<bool> toggleConnection() async {
-    if (_isConnecting) return false;
+    if (_isConnecting) {
+      debugPrint('VpnController: Toggle ignored - connection in progress');
+      return false;
+    }
 
     if (_isConnected) {
       return await disconnect();
@@ -143,22 +154,33 @@ class VpnController extends ChangeNotifier {
   }
 
   Future<bool> connect() async {
-    if (selectedServer == null) return false;
+    if (selectedServer == null) {
+      debugPrint('VpnController: Cannot connect - no server selected');
+      return false;
+    }
+
+    final serverToConnect = _selectedServer!;
 
     _isConnecting = true;
     _status = "Подключение...";
     notifyListeners();
 
     try {
-      await _coreManager.start(selectedServer!.config, mode: _vpnMode);
+      debugPrint('VpnController: Connecting to ${serverToConnect.displayName} in ${_vpnMode.name} mode');
+
+      await _coreManager.start(serverToConnect.config, mode: _vpnMode);
 
       _isConnected = true;
-      _status = "Подключено: ${selectedServer!.displayName}";
-      await UnifiedStorage.saveLastServer(selectedServer!.id);
+      _status = "Подключено: ${serverToConnect.displayName}";
+      await UnifiedStorage.saveLastServer(serverToConnect.id);
       _isConnecting = false;
+
+      debugPrint('VpnController: Connected successfully');
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('VpnController: Connection failed: $e');
+
       _coreManager.stop();
       _isConnecting = false;
       _isConnected = false;
@@ -169,6 +191,8 @@ class VpnController extends ChangeNotifier {
   }
 
   Future<bool> disconnect() async {
+    debugPrint('VpnController: Disconnecting...');
+
     _isConnecting = true;
     _status = "Отключение...";
     notifyListeners();
@@ -178,9 +202,13 @@ class VpnController extends ChangeNotifier {
       _isConnected = false;
       _status = "Отключено";
       _isConnecting = false;
+
+      debugPrint('VpnController: Disconnected successfully');
       notifyListeners();
       return true;
     } catch (e) {
+      debugPrint('VpnController: Disconnect failed: $e');
+
       _isConnecting = false;
       _status = "Ошибка отключения";
       notifyListeners();
@@ -190,16 +218,26 @@ class VpnController extends ChangeNotifier {
 
   Future<void> autoConnectToLastServer() async {
     final settings = await SettingsStorage.loadSettings();
-    if (!settings.autoConnectLastServer) return;
+    if (!settings.autoConnectLastServer) {
+      debugPrint('VpnController: Auto-connect disabled in settings');
+      return;
+    }
 
     final lastServerId = await UnifiedStorage.loadLastServerId();
-    if (lastServerId != null) {
-      final potentialServers = _allServers.where((s) => s.id == lastServerId);
-      final ServerItem? lastServer = potentialServers.isNotEmpty ? potentialServers.first : null;
-      if (lastServer != null) {
-        selectServer(lastServer);
-        await connect();
-      }
+    if (lastServerId == null) {
+      debugPrint('VpnController: No last server ID found');
+      return;
+    }
+
+    final potentialServers = _allServers.where((s) => s.id == lastServerId);
+    final ServerItem? lastServer = potentialServers.isNotEmpty ? potentialServers.first : null;
+
+    if (lastServer != null) {
+      debugPrint('VpnController: Auto-connecting to last server: ${lastServer.displayName}');
+      selectServer(lastServer);
+      await connect();
+    } else {
+      debugPrint('VpnController: Last server not found (ID: $lastServerId)');
     }
   }
 
@@ -209,41 +247,54 @@ class VpnController extends ChangeNotifier {
 
   Future<void> addServer(String config) async {
     try {
+      debugPrint('VpnController: Adding server...');
+
       final newServer = await UnifiedStorage.addManualServer(config);
       await loadInitialServers();
       await searchServers(newServer.displayName);
       selectServer(newServer);
+
+      debugPrint('VpnController: Server added: ${newServer.displayName}');
     } catch (e) {
-      // Handle error
+      debugPrint('VpnController: Failed to add server: $e');
+      rethrow;
     }
   }
 
   Future<void> deleteServer(String serverId) async {
+    debugPrint('VpnController: Deleting server: $serverId');
+
     final wasConnected = _isConnected && selectedServer?.id == serverId;
     if (wasConnected) {
+      debugPrint('VpnController: Disconnecting from server before deletion');
       await disconnect();
     }
 
     await UnifiedStorage.deleteServer(serverId);
     await loadInitialServers();
+
     if (selectedServer?.id == serverId) {
       _selectedServer = null;
+      debugPrint('VpnController: Cleared selected server');
     }
 
     notifyListeners();
   }
 
   Future<void> toggleFavorite(String serverId) async {
+    debugPrint('VpnController: Toggling favorite for server: $serverId');
     await UnifiedStorage.toggleFavorite(serverId);
     await loadInitialServers();
   }
 
   @override
   void dispose() {
+    debugPrint('VpnController: Disposing...');
     _coreManager.removeListener(_onCoreStatusChanged);
-    if (_isConnected) {
-      disconnect();
-    }
+
+    // Не вызываем disconnect() здесь так как dispose не может быть async
+    // Cleanup должен происходить в main.dart через WidgetsBindingObserver
+
     super.dispose();
   }
 }

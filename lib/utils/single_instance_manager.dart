@@ -25,7 +25,16 @@ class SingleInstanceManager {
         final pidInFile = await _getProcessIdFromFile(lockFile);
         if (pidInFile != null && await _isProcessRunning(pidInFile)) {
           // A valid instance is already running.
+          debugPrint('SingleInstance: Another instance is running (PID: $pidInFile)');
           return true;
+        } else {
+          debugPrint('SingleInstance: Stale lock file found, cleaning up...');
+          // Lock file is stale, delete it
+          try {
+            await lockFile.delete();
+          } catch (e) {
+            debugPrint('SingleInstance: Could not delete stale lock: $e');
+          }
         }
       }
 
@@ -41,10 +50,12 @@ class SingleInstanceManager {
         await _lock!.setPosition(0);
         await _lock!.writeString(pid.toString());
         await _lock!.flush();
+        debugPrint('SingleInstance: Lock acquired (PID: $pid)');
         return false;
-      } on FileSystemException {
+      } on FileSystemException catch (e) {
         // Could not acquire the lock, another instance is likely starting up
         // at the exact same time.
+        debugPrint('SingleInstance: Could not acquire lock: $e');
         await _lock?.close();
         _lock = null;
         return true;
@@ -62,8 +73,20 @@ class SingleInstanceManager {
     try {
       await _lock!.unlock();
       await _lock!.close();
-      // The file is left behind, but it's fine since we check the PID on startup.
-      // Deleting it could cause a race condition if another process starts immediately.
+      debugPrint('SingleInstance: Lock released');
+
+      // Удаляем lock файл при выходе
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final lockPath = path.join(tempDir.path, _lockFileName);
+        final lockFile = File(lockPath);
+        if (await lockFile.exists()) {
+          await lockFile.delete();
+          debugPrint('SingleInstance: Lock file deleted');
+        }
+      } catch (e) {
+        debugPrint('SingleInstance: Could not delete lock file: $e');
+      }
     } catch (e, s) {
       debugPrint('Error releasing instance lock: $e\n$s');
     } finally {
@@ -74,7 +97,8 @@ class SingleInstanceManager {
   static Future<int?> _getProcessIdFromFile(File file) async {
     try {
       final content = await file.readAsString();
-      return int.tryParse(content);
+      final trimmed = content.trim();
+      return int.tryParse(trimmed);
     } catch (e) {
       return null;
     }
@@ -83,13 +107,47 @@ class SingleInstanceManager {
   static Future<bool> _isProcessRunning(int pid) async {
     try {
       if (Platform.isWindows) {
-        final result = await Process.run('tasklist', ['/FI', 'PID eq $pid']);
-        // Check if stdout contains the PID, as tasklist has headers.
-        return result.stdout.toString().contains(pid.toString());
+        // ✅ ИСПРАВЛЕНИЕ: Используем точный фильтр PID
+        final result = await Process.run(
+          'tasklist',
+          ['/FI', 'PID eq $pid', '/NH'],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 2));
+
+        // Проверяем что вывод содержит ТОЧНО наш PID
+        final output = result.stdout.toString();
+
+        // Разбираем вывод tasklist
+        // Формат: ImageName PID SessionName SessionNumber MemUsage
+        final lines = output.split('\n');
+        for (final line in lines) {
+          if (line.trim().isEmpty) continue;
+
+          // Разбиваем по пробелам и ищем PID
+          final parts = line.trim().split(RegExp(r'\s+'));
+          if (parts.length >= 2) {
+            final pidInLine = int.tryParse(parts[1]);
+            if (pidInLine == pid) {
+              debugPrint('SingleInstance: Process with PID $pid is running');
+              return true;
+            }
+          }
+        }
+
+        debugPrint('SingleInstance: Process with PID $pid is not running');
+        return false;
+
       } else if (Platform.isLinux || Platform.isMacOS) {
         // `ps -p <pid>` has an exit code of 0 if the process exists.
-        final result = await Process.run('ps', ['-p', pid.toString()]);
-        return result.exitCode == 0;
+        final result = await Process.run(
+          'ps',
+          ['-p', pid.toString()],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 2));
+
+        final isRunning = result.exitCode == 0;
+        debugPrint('SingleInstance: Process with PID $pid ${isRunning ? 'is' : 'is not'} running');
+        return isRunning;
       }
     } catch (e, s) {
       debugPrint('Error checking if process $pid is running: $e\n$s');

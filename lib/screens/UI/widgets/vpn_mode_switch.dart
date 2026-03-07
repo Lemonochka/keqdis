@@ -46,10 +46,11 @@ class VpnModeSwitch extends StatelessWidget {
             label: 'TUN',
             icon: Icons.shield,
             isSelected: currentMode == VpnMode.tun,
-            onTap: tunAvailable
-                ? () => onModeChanged(VpnMode.tun)
-                : null,
-            isDisabled: !tunAvailable,
+            // Кнопка всегда кликабельна.
+            // Если нет прав админа — home_screen перехватит вызов и покажет UAC-диалог.
+            onTap: () => onModeChanged(VpnMode.tun),
+            // Показываем визуальную подсказку что нужны права, но не блокируем клик
+            needsAdmin: !tunAvailable,
           ),
         ],
       ),
@@ -62,18 +63,24 @@ class VpnModeSwitch extends StatelessWidget {
         required IconData icon,
         required bool isSelected,
         VoidCallback? onTap,
-        bool isDisabled = false,
+        bool needsAdmin = false,
       }) {
     final themeManager = ThemeManager();
 
+    String tooltip;
+    if (needsAdmin) {
+      tooltip = 'TUN режим (требуются права администратора)';
+    } else if (isConnected) {
+      tooltip = 'Отключитесь для смены режима';
+    } else {
+      tooltip = label == 'Proxy' ? 'System Proxy' : label;
+    }
+
     return Tooltip(
-      message: isDisabled
-          ? 'TUN режим недоступен'
-          : isConnected
-          ? 'Отключитесь для смены режима'
-          : label == 'Proxy' ? 'System Proxy' : label,
+      message: tooltip,
       child: InkWell(
-        onTap: isConnected || isDisabled ? null : onTap,
+        // Блокируем только если уже подключены (смена режима на лету через диалог)
+        onTap: isConnected ? null : onTap,
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -96,8 +103,9 @@ class VpnModeSwitch extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                color: isDisabled
-                    ? Colors.grey
+                // Если нужны права — иконка с замочком-оттенком, но не серая
+                color: needsAdmin
+                    ? Colors.white54
                     : isSelected
                     ? Colors.white
                     : Colors.white70,
@@ -108,13 +116,22 @@ class VpnModeSwitch extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isDisabled
-                      ? Colors.grey
+                  color: needsAdmin
+                      ? Colors.white54
                       : isSelected
                       ? Colors.white
                       : Colors.white70,
                 ),
               ),
+              // Маленький значок щита если нужны права
+              if (needsAdmin) ...[
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.lock_outline,
+                  size: 11,
+                  color: Colors.white38,
+                ),
+              ],
             ],
           ),
         ),
