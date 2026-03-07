@@ -12,11 +12,6 @@ class CustomNotification {
     Duration duration = const Duration(seconds: 5),
     IconData? icon,
   }) {
-    if (context == null) {
-      // Cannot show notification if there is no context.
-      return;
-    }
-
     final themeManager = ThemeManager();
     Color backgroundColor;
     Color iconColor;
@@ -47,6 +42,7 @@ class CustomNotification {
 
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
+    late Timer dismissTimer;
 
     overlayEntry = OverlayEntry(
       builder: (context) => _CustomNotificationWidget(
@@ -55,6 +51,9 @@ class CustomNotification {
         iconColor: iconColor,
         icon: icon ?? defaultIcon,
         onDismiss: () {
+          // Отменяем таймер при ручном закрытии
+          dismissTimer.cancel();
+
           if (overlayEntry.mounted) {
             overlayEntry.remove();
           }
@@ -64,10 +63,10 @@ class CustomNotification {
 
     overlay.insert(overlayEntry);
 
-    Timer(duration, () {
+    // ✅ ИСПРАВЛЕНИЕ: Таймер теперь правильно удаляет уведомление
+    dismissTimer = Timer(duration, () {
       if (overlayEntry.mounted) {
-        // This triggers the dismiss animation in the widget.
-        // The widget itself will call overlayEntry.remove() when done.
+        overlayEntry.remove();
       }
     });
   }
@@ -140,6 +139,7 @@ class _CustomNotificationWidgetState extends State<_CustomNotificationWidget>
 
   void _dismiss() {
     if (!mounted || _controller.isAnimating) return;
+
     _controller.reverse().then((_) {
       if (mounted) {
         widget.onDismiss();
