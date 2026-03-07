@@ -43,6 +43,8 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
 
   Future<void> _saveSettings() async {
     final currentSettings = await SettingsStorage.loadSettings();
+
+    // ✅ ИСПРАВЛЕНИЕ: Сохраняем все поля включая lastVpnMode
     final settings = AppSettings(
       localPort: currentSettings.localPort,
       directDomains: currentSettings.directDomains,
@@ -50,6 +52,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
       directIps: currentSettings.directIps,
       proxyDomains: currentSettings.proxyDomains,
       pingType: currentSettings.pingType,
+      lastVpnMode: currentSettings.lastVpnMode, // ✅ Добавлено
       autoStart: _autoStart,
       minimizeToTray: _minimizeToTray,
       startMinimized: _startMinimized,
@@ -57,7 +60,21 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
     );
 
     await SettingsStorage.saveSettings(settings);
-    await AutoStartService.toggle(_autoStart);
+
+    // Применяем настройку автозапуска
+    try {
+      await AutoStartService.toggle(_autoStart);
+    } catch (e) {
+      debugPrint('Failed to toggle autostart: $e');
+      if (mounted) {
+        CustomNotification.show(
+          context,
+          message: 'Не удалось настроить автозапуск: $e',
+          type: NotificationType.error,
+        );
+        return;
+      }
+    }
 
     widget.onSettingsChanged?.call();
 
@@ -113,72 +130,72 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : ListView(
-                        padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    Card(
+                      color: themeManager.settings.accentColor.withOpacity(0.3),
+                      child: Column(
                         children: [
-                          Card(
-                            color: themeManager.settings.accentColor.withOpacity(0.3),
-                            child: Column(
-                              children: [
-                                SwitchListTile(
-                                  title: const Text('Автозапуск'),
-                                  subtitle: const Text(
-                                    'Запускать приложение при старте системы',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                  value: _autoStart,
-                                  activeColor: themeManager.settings.primaryColor,
-                                  onChanged: (value) {
-                                    setState(() => _autoStart = value);
-                                    _saveSettings();
-                                  },
-                                ),
-                                const Divider(height: 1),
-                                SwitchListTile(
-                                  title: const Text('Сворачивать в трей'),
-                                  subtitle: const Text(
-                                    'При закрытии окна сворачивать в системный трей',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                  value: _minimizeToTray,
-                                  activeColor: themeManager.settings.primaryColor,
-                                  onChanged: (value) {
-                                    setState(() => _minimizeToTray = value);
-                                    _saveSettings();
-                                  },
-                                ),
-                                const Divider(height: 1),
-                                SwitchListTile(
-                                  title: const Text('Стартовать свернутым'),
-                                  subtitle: const Text(
-                                    'Запускать приложение свернутым в трей',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                  value: _startMinimized,
-                                  activeColor: themeManager.settings.primaryColor,
-                                  onChanged: (value) {
-                                    setState(() => _startMinimized = value);
-                                    _saveSettings();
-                                  },
-                                ),
-                                const Divider(height: 1),
-                                SwitchListTile(
-                                  title: const Text('Автоподключение'),
-                                  subtitle: const Text(
-                                    'Подключаться к последнему серверу при старте',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                  value: _autoConnectLastServer,
-                                  activeColor: themeManager.settings.primaryColor,
-                                  onChanged: (value) {
-                                    setState(() => _autoConnectLastServer = value);
-                                    _saveSettings();
-                                  },
-                                ),
-                              ],
+                          SwitchListTile(
+                            title: const Text('Автозапуск'),
+                            subtitle: const Text(
+                              'Запускать приложение при старте системы',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
                             ),
+                            value: _autoStart,
+                            activeColor: themeManager.settings.primaryColor,
+                            onChanged: (value) {
+                              setState(() => _autoStart = value);
+                              _saveSettings();
+                            },
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            title: const Text('Сворачивать в трей'),
+                            subtitle: const Text(
+                              'При закрытии окна сворачивать в системный трей',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                            value: _minimizeToTray,
+                            activeColor: themeManager.settings.primaryColor,
+                            onChanged: (value) {
+                              setState(() => _minimizeToTray = value);
+                              _saveSettings();
+                            },
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            title: const Text('Стартовать свернутым'),
+                            subtitle: const Text(
+                              'Запускать приложение свернутым в трей',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                            value: _startMinimized,
+                            activeColor: themeManager.settings.primaryColor,
+                            onChanged: (value) {
+                              setState(() => _startMinimized = value);
+                              _saveSettings();
+                            },
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            title: const Text('Автоподключение'),
+                            subtitle: const Text(
+                              'Подключаться к последнему серверу при старте',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                            value: _autoConnectLastServer,
+                            activeColor: themeManager.settings.primaryColor,
+                            onChanged: (value) {
+                              setState(() => _autoConnectLastServer = value);
+                              _saveSettings();
+                            },
                           ),
                         ],
                       ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

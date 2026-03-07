@@ -25,8 +25,13 @@ import 'home_main_content.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool isAutoStarted;
+  final bool startMinimized;
 
-  const HomeScreen({super.key, required this.isAutoStarted});
+  const HomeScreen({
+    super.key,
+    required this.isAutoStarted,
+    this.startMinimized = false,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -93,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       _startSubscriptionAutoUpdate();
 
-      if (_settings.autoConnectLastServer) {
+      if (_settings.autoConnectLastServer && !widget.startMinimized) {
         await _vpnController.autoConnectToLastServer();
       }
     } catch (e) {
@@ -167,10 +172,10 @@ class _HomeScreenState extends State<HomeScreen>
   void _startSubscriptionAutoUpdate() {
     _autoUpdateTimer = Timer.periodic(
       const Duration(hours: 12),
-      (_) async {
+          (_) async {
         try {
           final dueSubscriptions =
-              await SubscriptionService.getSubscriptionsDueForUpdate(
+          await SubscriptionService.getSubscriptionsDueForUpdate(
             interval: const Duration(hours: 12),
           );
 
@@ -317,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
         content: const Text(
-          'Для использования TUN режима необходимо запустить приложение от имени администратора.',
+          'Для использования TUN режима необходим перезапуск приложение от имени администратора.',
         ),
         actions: [
           TextButton(
@@ -345,25 +350,15 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _restartAsAdmin() async {
     try {
       if (Platform.isWindows) {
-        final exePath = Platform.resolvedExecutable;
+        final success = await TunService.requestAdminRights();
 
-        await Process.start(
-          'powershell',
-          [
-            '-Command',
-            'Start-Process',
-            '-FilePath',
-            '\"$exePath\"',
-            '-Verb',
-            'RunAs',
-          ],
-          runInShell: true,
-          mode: ProcessStartMode.detached,
-        );
-
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        await _exitApp();
+        if (!success && mounted) {
+          CustomNotification.show(
+            context,
+            message: 'Не удалось перезапустить с правами администратора',
+            type: NotificationType.error,
+          );
+        }
       } else {
         CustomNotification.show(
           context,
@@ -396,7 +391,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _pingAllServers(List<ServerItem> servers) async {
     await _pingManager.pingMultipleServers(servers, _settings.pingType, (server, isComplete) {
-      // Можно добавить логику для отслеживания прогресса, если нужно
     });
   }
 

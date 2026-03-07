@@ -78,7 +78,7 @@ class HomeSidebar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'v1.2.1',
+              'v1.2.2',
               style: TextStyle(
                 color: Colors.white.withAlpha(77),
                 fontSize: 12,
