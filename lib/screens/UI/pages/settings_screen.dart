@@ -272,8 +272,8 @@ class _SettingsViewState extends State<SettingsView> {
                           Slider(
                             value: themeManager.settings.backgroundOpacity,
                             min: 0.1,
-                            max: 0.9,
-                            divisions: 8,
+                            max: 1.0,
+                            divisions: 20,
                             label: '${(themeManager.settings.backgroundOpacity * 100).round()}%',
                             activeColor: themeManager.getThemeData().colorScheme.primary,
                             onChanged: (value) {
@@ -289,8 +289,8 @@ class _SettingsViewState extends State<SettingsView> {
                           Slider(
                             value: themeManager.settings.blurIntensity,
                             min: 0,
-                            max: 30,
-                            divisions: 30,
+                            max: 20.0,
+                            divisions: 40,
                             label: themeManager.settings.blurIntensity.round().toString(),
                             activeColor: themeManager.getThemeData().colorScheme.primary,
                             onChanged: (value) {

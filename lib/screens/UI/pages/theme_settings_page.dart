@@ -19,12 +19,36 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   double _opacity = 0.3;
   double _blur = 10.0;
 
+  // ✅ Кеш изображения для предотвращения пересоздания при изменении размера окна
+  ImageProvider? _cachedBackgroundImage;
+  String? _currentBackgroundPath;
+
   @override
   void initState() {
     super.initState();
     _themeManager = ThemeManager();
     _opacity = _themeManager.settings.backgroundOpacity;
     _blur = _themeManager.settings.blurIntensity;
+    _updateCachedImage();
+  }
+
+  // ✅ Обновляем кеш только если путь изменился
+  void _updateCachedImage() {
+    final path = _themeManager.settings.backgroundImagePath;
+    if (path != _currentBackgroundPath) {
+      _currentBackgroundPath = path;
+      if (path != null) {
+        _cachedBackgroundImage = FileImage(File(path));
+      } else {
+        _cachedBackgroundImage = null;
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ThemeSettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateCachedImage();
   }
 
   Future<void> _pickImage() async {
@@ -43,6 +67,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
       setState(() {
         _opacity = _themeManager.settings.backgroundOpacity;
         _blur = _themeManager.settings.blurIntensity;
+        _updateCachedImage();
       });
       widget.onThemeChanged?.call();
 
@@ -66,7 +91,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
   Future<void> _removeBackground() async {
     await _themeManager.removeBackground();
-    setState(() {});
+    setState(() {
+      _updateCachedImage();
+    });
     widget.onThemeChanged?.call();
 
     if (mounted) {
@@ -112,7 +139,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     final pickedColor = await showColorPickerDialog(
       context,
       currentColor,
-      title: Text('Выберите цвет'),
+      title: const Text('Выберите цвет'),
       pickersEnabled: const {
         ColorPickerType.wheel: true,
         ColorPickerType.accent: false,
@@ -139,13 +166,28 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ИСПРАВЛЕНИЕ: Фиксируем размер диалога чтобы он не растягивался
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(40),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 600, // ✅ Фиксированная ширина
+          maxHeight: 700, // ✅ Фиксированная высота
+        ),
+        child: _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
     return Scaffold(
       body: Stack(
         children: [
           // Кастомный фон
-          if (_themeManager.hasCustomBackground)
+          if (_themeManager.hasCustomBackground && _cachedBackgroundImage != null)
             Positioned.fill(
-              child: _buildOptimizedBackground(context),
+              child: _buildOptimizedBackground(),
             ),
 
           // Контент
@@ -227,33 +269,75 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
                               const Divider(height: 24),
 
-                              // Opacity slider
-                              const Text(
-                                'Прозрачность',
-                                style: TextStyle(fontSize: 14),
+                              // ✅ ИСПРАВЛЕНИЕ: Opacity slider с правильным диапазоном
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Прозрачность',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  Text(
+                                    '${(_opacity * 100).round()}%',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _themeManager.settings.primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Slider(
-                                value: _opacity,
-                                min: 0.0,
-                                max: 1.0,
-                                divisions: 20,
-                                label: '${(_opacity * 100).round()}%',
-                                onChanged: _updateOpacity,
+                              SliderTheme(
+                                data: SliderThemeData(
+                                  activeTrackColor: _themeManager.settings.primaryColor,
+                                  inactiveTrackColor: _themeManager.settings.primaryColor.withOpacity(0.3),
+                                  thumbColor: _themeManager.settings.primaryColor,
+                                  overlayColor: _themeManager.settings.primaryColor.withOpacity(0.2),
+                                ),
+                                child: Slider(
+                                  value: _opacity.clamp(0.0, 1.0), // ✅ Защита от выхода за границы
+                                  min: 0.0,
+                                  max: 1.0,
+                                  divisions: 100, // ✅ Увеличено для плавности
+                                  label: '${(_opacity * 100).round()}%',
+                                  onChanged: _updateOpacity,
+                                ),
                               ),
                               const SizedBox(height: 8),
 
-                              // Blur slider
-                              const Text(
-                                'Размытие',
-                                style: TextStyle(fontSize: 14),
+                              // ✅ ИСПРАВЛЕНИЕ: Blur slider с правильным диапазоном
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Размытие',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  Text(
+                                    _blur.round().toString(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _themeManager.settings.primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Slider(
-                                value: _blur,
-                                min: 0.0,
-                                max: 20.0,
-                                divisions: 20,
-                                label: _blur.round().toString(),
-                                onChanged: _updateBlur,
+                              SliderTheme(
+                                data: SliderThemeData(
+                                  activeTrackColor: _themeManager.settings.primaryColor,
+                                  inactiveTrackColor: _themeManager.settings.primaryColor.withOpacity(0.3),
+                                  thumbColor: _themeManager.settings.primaryColor,
+                                  overlayColor: _themeManager.settings.primaryColor.withOpacity(0.2),
+                                ),
+                                child: Slider(
+                                  value: _blur.clamp(0.0, 20.0), // ✅ Защита от выхода за границы
+                                  min: 0.0,
+                                  max: 20.0,
+                                  divisions: 40, // ✅ Увеличено для плавности
+                                  label: _blur.round().toString(),
+                                  onChanged: _updateBlur,
+                                ),
                               ),
                             ] else ...[
                               SizedBox(
@@ -349,25 +433,13 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     );
   }
 
-  Widget _buildOptimizedBackground(BuildContext context) {
-    final path = _themeManager.settings.backgroundImagePath!;
-    final imageProvider = FileImage(File(path));
-
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
-    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
-
-    final resizedImageProvider = ResizeImage(
-      imageProvider,
-      width: screenWidth,
-      height: screenHeight,
-    );
-
+  // ✅ ИСПРАВЛЕНИЕ: Используем кешированное изображение
+  Widget _buildOptimizedBackground() {
     return Stack(
       fit: StackFit.expand,
       children: [
         Image(
-          image: resizedImageProvider,
+          image: _cachedBackgroundImage!,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
             debugPrint('Ошибка загрузки фонового изображения: $error');
@@ -376,9 +448,14 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
           },
         ),
         BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: _blur, sigmaY: _blur),
+          filter: ImageFilter.blur(
+            sigmaX: _blur.clamp(0.0, 20.0), // ✅ Защита от некорректных значений
+            sigmaY: _blur.clamp(0.0, 20.0),
+          ),
           child: Container(
-            color: Colors.black.withAlpha(((1.0 - _opacity) * 255).round()),
+            color: Colors.black.withAlpha(
+              ((1.0 - _opacity.clamp(0.0, 1.0)) * 255).round().clamp(0, 255),
+            ),
           ),
         ),
       ],
