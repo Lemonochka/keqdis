@@ -7,7 +7,6 @@
 [![Platform](https://img.shields.io/badge/platform-Windows-blue?style=flat-square&logo=windows)](https://github.com)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=flat-square&logo=flutter)](https://flutter.dev)
 [![Version](https://img.shields.io/badge/version-1.3.0-green?style=flat-square)](https://github.com)
-[![License](https://img.shields.io/badge/license-MIT-orange?style=flat-square)](LICENSE)
 
 </div>
 
