@@ -92,7 +92,7 @@ flutter build windows --release
 | `geoip.dat` | [v2fly/geoip](https://github.com/v2fly/geoip/releases) |
 | `geosite.dat` | [v2fly/domain-list-community](https://github.com/v2fly/domain-list-community/releases) |
 
-## Подробно
+##
 
 | UI | Flutter / Dart |
 | VPN backend | Xray-core, sing-box |
