@@ -1,6 +1,7 @@
 import 'dart:convert';
 import '../storages/improved_settings_storage.dart';
 import '../core/tun_service.dart';
+import '../storages/app_routing_storage.dart';
 
 class ConfigGeneratorV2 {
 
@@ -56,7 +57,6 @@ class ConfigGeneratorV2 {
       (outbound['streamSettings'] as Map)['sockopt'] = {"tcpFastOpen": true};
     }
 
-    // Transport Settings
     final stream = outbound['streamSettings'] as Map<String, dynamic>;
     final type = stream['network'];
     final security = stream['security'];
@@ -83,9 +83,7 @@ class ConfigGeneratorV2 {
       stream['tcpSettings'] = {
         "header": {
           "type": "http",
-          "request": {
-            "headers": {"Host": [getParam('host', address)]}
-          }
+          "request": {"headers": {"Host": [getParam('host', address)]}}
         }
       };
     } else if (type == 'ws') {
@@ -99,18 +97,11 @@ class ConfigGeneratorV2 {
         "multiMode": getParam('mode') == 'multi'
       };
     } else if (type == 'xhttp' || type == 'splithttp') {
-      final xhttpSettings = <String, dynamic>{
-        "path": getParam('path', '/'),
-      };
-
+      final xhttpSettings = <String, dynamic>{"path": getParam('path', '/')};
       final host = getParam('host');
       xhttpSettings['host'] = host.isNotEmpty ? host : sni;
-
       final xhttpMode = getParam('mode');
-      if (xhttpMode.isNotEmpty) {
-        xhttpSettings['mode'] = xhttpMode;
-      }
-
+      if (xhttpMode.isNotEmpty) xhttpSettings['mode'] = xhttpMode;
       stream['xhttpSettings'] = xhttpSettings;
     } else if (type == 'httpupgrade') {
       stream['httpupgradeSettings'] = {
@@ -119,97 +110,34 @@ class ConfigGeneratorV2 {
       };
     }
 
+    List<String> parseList(String s) =>
+        s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
-    List<String> _parseList(String input) {
-      return input
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    }
-
-    List<String> _normalizeDomains(List<String> domains) {
+    List<String> normalizeDomains(List<String> domains) {
       return domains.map((domain) {
         final cleaned = domain.trim().toLowerCase();
-
         if (cleaned.startsWith('domain:') ||
             cleaned.startsWith('full:') ||
             cleaned.startsWith('regexp:') ||
             cleaned.startsWith('geosite:')) {
           return cleaned;
         }
-
         if (!cleaned.contains('.')) {
           return 'regexp:.*\\.${cleaned}\$';
         }
-
         if (cleaned.startsWith('.')) {
           return 'domain:${cleaned.substring(1)}';
         }
-
         return 'domain:$cleaned';
       }).toList();
     }
 
-    final directDomains = _normalizeDomains(_parseList(settings.directDomains));
-    final blockedDomains = _normalizeDomains(_parseList(settings.blockedDomains));
-    final proxyDomains = _normalizeDomains(_parseList(settings.proxyDomains));
-    final directIps = _parseList(settings.directIps);
+    final directDomains = normalizeDomains(parseList(settings.directDomains));
+    final blockedDomains = normalizeDomains(parseList(settings.blockedDomains));
+    final proxyDomains = normalizeDomains(parseList(settings.proxyDomains));
+    final directIps = parseList(settings.directIps);
 
     final rules = <Map<String, dynamic>>[];
-
-    rules.add({
-      "type": "field",
-      "ip": ["169.254.0.0/16", "224.0.0.0/4", "255.255.255.255/32"],
-      "outboundTag": "block"
-    });
-
-    if (blockedDomains.isNotEmpty) {
-      rules.add({
-        "type": "field",
-        "domain": blockedDomains,
-        "outboundTag": "block"
-      });
-    }
-
-    if (mode == VpnMode.systemProxy) {
-      final isIpAddress = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(address);
-      if (isIpAddress) {
-        rules.add({
-          "type": "field",
-          "ip": [address],
-          "outboundTag": "direct"
-        });
-      } else {
-        rules.add({
-          "type": "field",
-          "domain": [address],
-          "outboundTag": "direct"
-        });
-      }
-    }
-
-    if (directDomains.isNotEmpty) {
-      rules.add({
-        "type": "field",
-        "domain": directDomains,
-        "outboundTag": "direct"
-      });
-    }
-
-    if (directIps.isNotEmpty) {
-      rules.add({
-        "type": "field",
-        "ip": directIps,
-        "outboundTag": "direct"
-      });
-    }
-
-    rules.add({
-      "type": "field",
-      "ip": ["geoip:private"],
-      "outboundTag": "direct"
-    });
 
     if (mode == VpnMode.systemProxy) {
       rules.add({
@@ -220,23 +148,42 @@ class ConfigGeneratorV2 {
       });
     }
 
-    if (proxyDomains.isNotEmpty) {
-      rules.add({
-        "type": "field",
-        "domain": proxyDomains,
-        "outboundTag": "proxy"
-      });
-    }
-
     rules.add({
       "type": "field",
-      "outboundTag": "proxy",
-      "network": "tcp,udp"
+      "ip": ["169.254.0.0/16", "224.0.0.0/4", "255.255.255.255/32"],
+      "outboundTag": "block"
     });
 
-    // --- CONFIG ---
+    if (blockedDomains.isNotEmpty) {
+      rules.add({"type": "field", "domain": blockedDomains, "outboundTag": "block"});
+    }
+
+    if (mode == VpnMode.systemProxy) {
+      final isIpAddress = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(address);
+      if (isIpAddress) {
+        rules.add({"type": "field", "ip": [address], "outboundTag": "direct"});
+      } else {
+        rules.add({"type": "field", "domain": ["full:$address"], "outboundTag": "direct"});
+      }
+    }
+
+    if (directDomains.isNotEmpty) {
+      rules.add({"type": "field", "domain": directDomains, "outboundTag": "direct"});
+    }
+    if (directIps.isNotEmpty) {
+      rules.add({"type": "field", "ip": directIps, "outboundTag": "direct"});
+    }
+
+    rules.add({"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"});
+
+    if (proxyDomains.isNotEmpty) {
+      rules.add({"type": "field", "domain": proxyDomains, "outboundTag": "proxy"});
+    }
+
+    rules.add({"type": "field", "outboundTag": "proxy", "network": "tcp,udp"});
+
     final config = <String, dynamic>{
-      "log": {"loglevel": "info"},
+      "log": {"loglevel": "warning"},
       "inbounds": <Map<String, dynamic>>[],
       "outbounds": <Map<String, dynamic>>[
         outbound,
@@ -244,7 +191,7 @@ class ConfigGeneratorV2 {
         <String, dynamic>{"protocol": "blackhole", "tag": "block"}
       ],
       "routing": {
-        "domainStrategy": "AsIs",
+        "domainStrategy": "IPIfNonMatch",
         "rules": rules
       }
     };
@@ -252,13 +199,11 @@ class ConfigGeneratorV2 {
     if (mode == VpnMode.systemProxy) {
       config["dns"] = {
         "servers": ["fakedns", "8.8.8.8", "1.1.1.1"],
-        "tag": "dns-out",
         "queryStrategy": "UseIPv4"
       };
       config["fakedns"] = [{"ipPool": "198.18.0.0/15", "poolSize": 65535}];
       config["outbounds"].add(<String, dynamic>{"protocol": "dns", "tag": "dns-out"});
     }
-
 
     if (mode == VpnMode.tun) {
       config['inbounds'].add({
@@ -266,14 +211,10 @@ class ConfigGeneratorV2 {
         "port": settings.localPort,
         "listen": "127.0.0.1",
         "protocol": "socks",
-        "settings": {
-          "auth": "noauth",
-          "udp": true,
-          "ip": "127.0.0.1"
-        },
+        "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"},
         "sniffing": {
           "enabled": true,
-          "destOverride": ["http", "tls", "quic"]
+          "destOverride": ["http", "tls", "quic", "fakedns"]
         }
       });
     } else {
@@ -282,13 +223,10 @@ class ConfigGeneratorV2 {
         "port": settings.localPort,
         "listen": "127.0.0.1",
         "protocol": "mixed",
-        "settings": {
-          "allowTransparent": false,
-          "udpEnabled": true
-        },
+        "settings": {"allowTransparent": false, "udpEnabled": true},
         "sniffing": {
           "enabled": true,
-          "destOverride": ["http", "tls", "quic"]
+          "destOverride": ["http", "tls", "quic", "fakedns"]
         }
       });
     }
@@ -302,117 +240,142 @@ class SingBoxChainGen {
     required int localSocksPort,
     required String serverIpToExclude,
     required AppSettings settings,
+    List<String> vpnProcessNames = const [],
+    AppRoutingMode routingMode = AppRoutingMode.allProxy,
   }) {
-    List<String> _parseList(String input) {
-      return input
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    }
+    List<String> parseList(String s) =>
+        s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
-    List<String> _normalizeDomains(List<String> domains) {
+    List<String> normalizeDomains(List<String> domains) {
       return domains.map((domain) {
-        final cleaned = domain.trim().toLowerCase();
-
-        if (cleaned.startsWith('.')) {
-          return cleaned.substring(1);
+        var cleaned = domain.trim().toLowerCase();
+        for (final prefix in ['domain:', 'full:', 'regexp:', 'geosite:']) {
+          if (cleaned.startsWith(prefix)) {
+            cleaned = cleaned.substring(prefix.length);
+            break;
+          }
         }
-
-        return cleaned;
-      }).toList();
+        if (cleaned.startsWith('.')) cleaned = cleaned.substring(1);
+        if (cleaned.isEmpty) return '';
+        return '.$cleaned';
+      }).where((d) => d.isNotEmpty && d != '.').toList();
     }
 
-    final directDomains = _normalizeDomains(_parseList(settings.directDomains));
-    final blockedDomains = _normalizeDomains(_parseList(settings.blockedDomains));
-    final proxyDomains = _normalizeDomains(_parseList(settings.proxyDomains));
-    final directIps = _parseList(settings.directIps);
+    final directDomains = normalizeDomains(parseList(settings.directDomains));
+    final blockedDomains = normalizeDomains(parseList(settings.blockedDomains));
+    final proxyDomains = normalizeDomains(parseList(settings.proxyDomains));
+    final directIps = parseList(settings.directIps);
 
-    // --- ROUTING RULES ---
     final rules = <Map<String, dynamic>>[];
 
-    rules.add({
-      "protocol": ["dns"],
-      "action": "hijack-dns"
-    });
+    rules.add({"action": "sniff"});
+
+    rules.add({"action": "hijack-dns", "protocol": ["dns"]});
+
+    if (vpnProcessNames.isNotEmpty) {
+      switch (routingMode) {
+        case AppRoutingMode.onlySelected:
+          rules.add({
+            "action": "route",
+            "outbound": "proxy-out",
+            "process_name": vpnProcessNames,
+          });
+        case AppRoutingMode.allExceptSelected:
+          rules.add({
+            "action": "route",
+            "outbound": "direct",
+            "process_name": vpnProcessNames,
+          });
+        case AppRoutingMode.allProxy:
+
+          break;
+      }
+    }
 
     if (blockedDomains.isNotEmpty) {
-      rules.add({
-        "domain": blockedDomains,
-        "outbound": "block"
-      });
+      rules.add({"action": "reject", "domain_suffix": blockedDomains});
     }
 
     if (serverIpToExclude.isNotEmpty) {
       rules.add({
-        "ip_cidr": [serverIpToExclude],
-        "outbound": "direct"
+        "action": "route",
+        "outbound": "direct",
+        "ip_cidr": ["$serverIpToExclude/32"],
       });
     }
 
-    if (directDomains.isNotEmpty) {
+    if (directDomains.isNotEmpty && routingMode != AppRoutingMode.allProxy) {
       rules.add({
+        "action": "route",
+        "outbound": "direct",
         "domain_suffix": directDomains,
-        "outbound": "direct"
       });
     }
 
-    if (directIps.isNotEmpty) {
+    if (directIps.isNotEmpty && routingMode != AppRoutingMode.allProxy) {
       rules.add({
+        "action": "route",
+        "outbound": "direct",
         "ip_cidr": directIps,
-        "outbound": "direct"
       });
     }
 
-    rules.add({
-      "ip_is_private": true,
-      "outbound": "direct"
-    });
+    rules.add({"action": "route", "outbound": "direct", "ip_is_private": true});
 
     if (proxyDomains.isNotEmpty) {
       rules.add({
+        "action": "route",
+        "outbound": "proxy-out",
         "domain_suffix": proxyDomains,
-        "outbound": "proxy-out"
       });
     }
 
-    rules.add({
-      "outbound": "proxy-out"
-    });
+    final dnsFinal = (routingMode == AppRoutingMode.onlySelected)
+        ? "local-dns"
+        : "remote-dns";
 
     final dnsRules = <Map<String, dynamic>>[];
 
-    if (directDomains.isNotEmpty) {
+    if (vpnProcessNames.isNotEmpty && routingMode == AppRoutingMode.onlySelected) {
       dnsRules.add({
+        "action": "route",
+        "process_name": vpnProcessNames,
+        "server": "remote-dns"
+      });
+    }
+
+    if (directDomains.isNotEmpty && routingMode != AppRoutingMode.allProxy) {
+      dnsRules.add({
+        "action": "route",
         "domain_suffix": directDomains,
         "server": "local-dns"
       });
     }
 
-    dnsRules.add({
-      "server": "google-dns"
-    });
+    final routeFinal = (routingMode == AppRoutingMode.onlySelected)
+        ? "direct"
+        : "proxy-out";
 
-    final map = {
-      "log": {
-        "level": "info",
-        "timestamp": true
-      },
+    final map = <String, dynamic>{
+      "log": {"level": "info", "timestamp": true},
       "dns": {
         "servers": [
           {
-            "tag": "google-dns",
-            "address": "udp://1.1.1.1",
+            "type": "udp",
+            "tag": "remote-dns",
+            "server": "1.1.1.1",
+            "server_port": 53,
             "detour": "proxy-out"
           },
           {
+            "type": "local",
             "tag": "local-dns",
-            "address": "local",
             "detour": "direct"
           }
         ],
         "rules": dnsRules,
-        "strategy": "ipv4_only"
+        "strategy": "ipv4_only",
+        "final": dnsFinal
       },
       "inbounds": [
         {
@@ -424,8 +387,6 @@ class SingBoxChainGen {
           "auto_route": true,
           "strict_route": true,
           "stack": "mixed",
-          "sniff": true,
-          "sniff_override_destination": false
         }
       ],
       "outbounds": [
@@ -439,15 +400,15 @@ class SingBoxChainGen {
         },
         {
           "type": "direct",
-          "tag": "direct"
+          "tag": "direct",
+          "domain_resolver": "local-dns"
         },
-        {
-          "type": "block",
-          "tag": "block"
-        }
       ],
       "route": {
         "auto_detect_interface": true,
+        "find_process": true,
+        "final": routeFinal,
+        "default_domain_resolver": "remote-dns",
         "rules": rules
       }
     };

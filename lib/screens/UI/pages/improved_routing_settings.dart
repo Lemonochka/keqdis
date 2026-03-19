@@ -1,35 +1,44 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/storages/improved_settings_storage.dart';
 import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
+import 'app_routing_page.dart';
 
 class ImprovedRoutingSettingsPage extends StatefulWidget {
   final VoidCallback? onSettingsChanged;
-  const ImprovedRoutingSettingsPage({super.key, this.onSettingsChanged});
+  final bool isVpnConnected;
+  final VoidCallback? onReconnectRequest;
+
+  const ImprovedRoutingSettingsPage({
+    super.key,
+    this.onSettingsChanged,
+    this.isVpnConnected = false,
+    this.onReconnectRequest,
+  });
 
   @override
-  State<ImprovedRoutingSettingsPage> createState() => _ImprovedRoutingSettingsPageState();
+  State<ImprovedRoutingSettingsPage> createState() =>
+      _ImprovedRoutingSettingsPageState();
 }
 
-class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPage> {
+class _ImprovedRoutingSettingsPageState
+    extends State<ImprovedRoutingSettingsPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   bool _isLoading = true;
 
-  // Списки для каждого типа
   List<String> _directDomains = [];
   List<String> _blockedDomains = [];
   List<String> _proxyDomains = [];
   List<String> _directIps = [];
 
-  // Контроллеры для ввода
   final _directDomainCtrl = TextEditingController();
   final _blockedDomainCtrl = TextEditingController();
   final _proxyDomainCtrl = TextEditingController();
   final _directIpCtrl = TextEditingController();
 
-  // Пресеты
   final Map<String, List<String>> _domainPresets = {
     'Россия': ['ru', 'рф', 'su', 'yandex.ru', 'vk.com', 'mail.ru', 'ok.ru', 'avito.ru', 'ozon.ru'],
     'Соц. сети (РФ)': ['vk.com', 'ok.ru', 'dzen.ru', 'rutube.ru'],
@@ -53,11 +62,13 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadSettings();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _directDomainCtrl.dispose();
     _blockedDomainCtrl.dispose();
     _proxyDomainCtrl.dispose();
@@ -78,17 +89,10 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
     }
   }
 
-  List<String> _parseToList(String input) {
-    return input
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-  }
+  List<String> _parseToList(String input) =>
+      input.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
-  String _listToString(List<String> list) {
-    return list.join(', ');
-  }
+  String _listToString(List<String> list) => list.join(', ');
 
   Future<void> _saveSettings() async {
     final currentSettings = await SettingsStorage.loadSettings();
@@ -104,10 +108,8 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
       startMinimized: currentSettings.startMinimized,
       autoConnectLastServer: currentSettings.autoConnectLastServer,
     );
-
     await SettingsStorage.saveSettings(settings);
     widget.onSettingsChanged?.call();
-
     if (mounted) {
       CustomNotification.show(
         context,
@@ -117,27 +119,20 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
     }
   }
 
-  void _addDomain(List<String> list, TextEditingController controller, String name) {
+  void _addDomain(
+      List<String> list, TextEditingController controller, String name) {
     final value = controller.text.trim();
     if (value.isEmpty) {
-      CustomNotification.show(
-        context,
-        message: 'Введите $name',
-        type: NotificationType.error,
-      );
+      CustomNotification.show(context,
+          message: 'Введите $name', type: NotificationType.error);
       return;
     }
-
-    // Валидация домена/IP
     if (!_isValidDomainOrIp(value)) {
-      CustomNotification.show(
-        context,
-        message: 'Некорректный формат: $value',
-        type: NotificationType.error,
-      );
+      CustomNotification.show(context,
+          message: 'Некорректный формат: $value',
+          type: NotificationType.error);
       return;
     }
-
     setState(() {
       if (!list.contains(value)) {
         list.add(value);
@@ -147,69 +142,43 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
   }
 
   bool _isValidDomainOrIp(String value) {
-    // Простая валидация
     if (value.contains(' ')) return false;
-
-    // Xray префиксы
     if (value.startsWith('domain:') ||
         value.startsWith('full:') ||
         value.startsWith('regexp:') ||
-        value.startsWith('geosite:')) {
-      return true;
-    }
-
-    // IP адрес с маской (CIDR)
-    if (value.contains('/')) {
+        value.startsWith('geosite:')) return true;
+    if (value.contains('/'))
       return RegExp(r'^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$').hasMatch(value);
-    }
-
-    // IP адрес
-    if (RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(value)) {
-      return true;
-    }
-
-    // TLD (ru, com, net и т.д.)
-    if (!value.contains('.') && RegExp(r'^[a-zA-Zа-яА-Я0-9]+$').hasMatch(value)) {
-      return true;
-    }
-
-    // Домен с точкой в начале (.google.com)
-    if (value.startsWith('.')) {
-      return RegExp(r'^\.([a-zA-Z0-9а-яА-Я\-]+\.)*[a-zA-Z0-9а-яА-Я\-]+$').hasMatch(value);
-    }
-
-    // Обычный домен
-    return RegExp(r'^([a-zA-Z0-9а-яА-Я\-]+\.)*[a-zA-Z0-9а-яА-Я\-]+$').hasMatch(value);
+    if (RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(value)) return true;
+    if (!value.contains('.') &&
+        RegExp(r'^[a-zA-Zа-яА-Я0-9]+$').hasMatch(value)) return true;
+    if (value.startsWith('.'))
+      return RegExp(r'^\.[a-zA-Z0-9а-яА-Я\-]+(\.[a-zA-Z0-9а-яА-Я\-]+)*$')
+          .hasMatch(value);
+    return RegExp(r'^([a-zA-Z0-9а-яА-Я\-]+\.)*[a-zA-Z0-9а-яА-Я\-]+$')
+        .hasMatch(value);
   }
 
-  void _removeDomain(List<String> list, String value) {
-    setState(() {
-      list.remove(value);
-    });
-  }
+  void _removeDomain(List<String> list, String value) =>
+      setState(() => list.remove(value));
 
   void _addPreset(List<String> targetList, List<String> preset) {
     setState(() {
       for (var item in preset) {
-        if (!targetList.contains(item)) {
-          targetList.add(item);
-        }
+        if (!targetList.contains(item)) targetList.add(item);
       }
     });
-    CustomNotification.show(
-      context,
-      message: 'Пресет добавлен',
-      type: NotificationType.success,
-    );
+    CustomNotification.show(context,
+        message: 'Пресет добавлен', type: NotificationType.success);
   }
 
-  void _showPresetDialog(BuildContext context, String title, Map<String, List<String>> presets, List<String> targetList) {
+  void _showPresetDialog(BuildContext context, String title,
+      Map<String, List<String>> presets, List<String> targetList) {
     final themeManager = ThemeManager();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0A0E27), // Используем темный фон
+        backgroundColor: const Color(0xFF0A0E27),
         title: Text(title),
         content: SizedBox(
           width: double.maxFinite,
@@ -219,7 +188,9 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
               return Card(
                 color: themeManager.settings.accentColor.withOpacity(0.3),
                 child: ListTile(
-                  title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  title: Text(entry.key,
+                      style:
+                      const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(
                     entry.value.join(', '),
                     maxLines: 2,
@@ -227,7 +198,8 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                     style: const TextStyle(fontSize: 11, color: Colors.grey),
                   ),
                   trailing: IconButton(
-                    icon: Icon(Icons.add_circle, color: themeManager.settings.primaryColor),
+                    icon: Icon(Icons.add_circle,
+                        color: themeManager.settings.primaryColor),
                     onPressed: () {
                       _addPreset(targetList, entry.value);
                       Navigator.pop(context);
@@ -240,9 +212,8 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть')),
         ],
       ),
     );
@@ -259,7 +230,6 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
     IconData icon = Icons.add,
   }) {
     final themeManager = ThemeManager();
-
     return Card(
       color: themeManager.settings.accentColor.withOpacity(0.3),
       child: Padding(
@@ -275,18 +245,14 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: themeManager.settings.primaryColor,
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
+                      Text(title,
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: themeManager.settings.primaryColor)),
+                      Text(subtitle,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -294,20 +260,19 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                   IconButton(
                     icon: const Icon(Icons.library_add, size: 20),
                     tooltip: 'Пресеты',
-                    onPressed: () => _showPresetDialog(context, 'Выберите пресет', presets, items),
+                    onPressed: () => _showPresetDialog(
+                        context, 'Выберите пресет', presets, items),
                   ),
                 IconButton(
                   icon: const Icon(Icons.delete_sweep, size: 20),
                   tooltip: 'Очистить всё',
-                  onPressed: items.isEmpty ? null : () {
-                    setState(() => items.clear());
-                  },
+                  onPressed: items.isEmpty
+                      ? null
+                      : () => setState(() => items.clear()),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-
-            // Поле ввода
             Row(
               children: [
                 Expanded(
@@ -316,14 +281,16 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                     style: const TextStyle(fontSize: 14),
                     decoration: InputDecoration(
                       hintText: placeholder,
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                      hintStyle:
+                      TextStyle(color: Colors.white.withOpacity(0.3)),
                       filled: true,
                       fillColor: Colors.white.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
                       prefixIcon: const Icon(Icons.edit, size: 18),
                     ),
                     onSubmitted: (_) => onAdd(),
@@ -331,23 +298,20 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: Icon(Icons.add_circle, color: themeManager.settings.primaryColor, size: 32),
+                  icon: Icon(Icons.add_circle,
+                      color: themeManager.settings.primaryColor, size: 32),
                   onPressed: onAdd,
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // Чипы
             if (items.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'Нет элементов',
-                    style: TextStyle(color: Colors.white.withOpacity(0.3)),
-                  ),
+                  child: Text('Нет элементов',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.3))),
                 ),
               )
             else
@@ -356,38 +320,55 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                 runSpacing: 8,
                 children: items.map((item) {
                   return Chip(
-                    label: Text(item, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: themeManager.settings.primaryColor.withOpacity(0.2),
+                    label: Text(item,
+                        style: const TextStyle(fontSize: 12)),
+                    backgroundColor:
+                    themeManager.settings.primaryColor.withOpacity(0.2),
                     deleteIcon: const Icon(Icons.close, size: 16),
                     onDeleted: () => _removeDomain(items, item),
                     deleteIconColor: Colors.white70,
                   );
                 }).toList(),
               ),
-
-            // Счетчик
             const SizedBox(height: 8),
-            Text(
-              'Всего: ${items.length}',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white.withOpacity(0.5),
-              ),
-            ),
+            Text('Всего: ${items.length}',
+                style: TextStyle(
+                    fontSize: 11, color: Colors.white.withOpacity(0.5))),
           ],
         ),
       ),
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager();
-
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: themeManager.settings.accentColor.withOpacity(0.9),
+        title: const Text('Маршрутизация'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => _showHelpDialog(context),
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: themeManager.settings.primaryColor,
+          indicatorWeight: 3,
+          labelColor: themeManager.settings.primaryColor,
+          unselectedLabelColor: Colors.white54,
+          tabs: const [
+            Tab(icon: Icon(Icons.public, size: 18), text: 'Домены и IP'),
+            Tab(icon: Icon(Icons.apps, size: 18), text: 'Приложения'),
+          ],
+        ),
+      ),
       body: Stack(
         children: [
-          // Кастомный фон
+          // Фон
           if (themeManager.hasCustomBackground)
             Positioned.fill(
               child: Stack(
@@ -403,144 +384,122 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
                       sigmaY: themeManager.settings.blurIntensity,
                     ),
                     child: Container(
-                      color: Colors.black.withOpacity(1.0 - themeManager.settings.backgroundOpacity),
+                      color: Colors.black.withOpacity(
+                          1.0 - themeManager.settings.backgroundOpacity),
                     ),
                   ),
                 ],
               ),
             ),
 
-          // Контент
-          Column(
+          TabBarView(
+            controller: _tabController,
             children: [
-              AppBar(
-                backgroundColor: themeManager.settings.accentColor.withOpacity(0.9),
-                title: const Text('Маршрутизация'),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.help_outline),
-                    onPressed: () => _showHelpDialog(context),
-                  ),
-                ],
-              ),
-
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // Подсказка
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline, color: Colors.blue, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Добавляйте домены и IP-адреса для гибкой маршрутизации трафика',
-                              style: TextStyle(fontSize: 13, color: Colors.blue[200]),
-                            ),
+              _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.blue.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            color: Colors.blue, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Добавляйте домены и IP-адреса для гибкой маршрутизации трафика',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.blue[200]),
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildChipSection(
+                    title: 'Прямое подключение (Direct)',
+                    subtitle: 'Домены, которые будут открываться без VPN',
+                    items: _directDomains,
+                    controller: _directDomainCtrl,
+                    placeholder: 'Например: yandex.ru или ru',
+                    icon: Icons.public,
+                    presets: _domainPresets,
+                    onAdd: () => _addDomain(_directDomains, _directDomainCtrl, 'домен'),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildChipSection(
+                    title: 'Принудительно через VPN (Proxy)',
+                    subtitle: 'Домены, которые всегда будут идти через VPN',
+                    items: _proxyDomains,
+                    controller: _proxyDomainCtrl,
+                    placeholder: 'Например: google.com',
+                    icon: Icons.vpn_lock,
+                    presets: _domainPresets,
+                    onAdd: () => _addDomain(_proxyDomains, _proxyDomainCtrl, 'домен'),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildChipSection(
+                    title: 'Заблокированные (Block)',
+                    subtitle: 'Домены, к которым будет запрещен доступ',
+                    items: _blockedDomains,
+                    controller: _blockedDomainCtrl,
+                    placeholder: 'Например: ads.example.com',
+                    icon: Icons.block,
+                    presets: _blockedPresets,
+                    onAdd: () => _addDomain(_blockedDomains, _blockedDomainCtrl, 'домен'),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildChipSection(
+                    title: 'IP адреса (Direct)',
+                    subtitle: 'IP адреса или подсети для прямого подключения',
+                    items: _directIps,
+                    controller: _directIpCtrl,
+                    placeholder: 'Например: 192.168.0.0/16',
+                    icon: Icons.router,
+                    presets: _ipPresets,
+                    onAdd: () => _addDomain(_directIps, _directIpCtrl, 'IP адрес'),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 56,
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saveSettings,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: themeManager.settings.primaryColor,
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.save, size: 24),
+                          SizedBox(width: 12),
+                          Text('Сохранить настройки'),
                         ],
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
 
-                    const SizedBox(height: 24),
-
-                    // Direct домены
-                    _buildChipSection(
-                      title: 'Прямое подключение (Direct)',
-                      subtitle: 'Домены, которые будут открываться без VPN',
-                      items: _directDomains,
-                      controller: _directDomainCtrl,
-                      placeholder: 'Например: yandex.ru или ru',
-                      icon: Icons.public,
-                      presets: _domainPresets,
-                      onAdd: () => _addDomain(_directDomains, _directDomainCtrl, 'домен'),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Proxy домены
-                    _buildChipSection(
-                      title: 'Принудительно через VPN (Proxy)',
-                      subtitle: 'Домены, которые всегда будут идти через VPN',
-                      items: _proxyDomains,
-                      controller: _proxyDomainCtrl,
-                      placeholder: 'Например: google.com',
-                      icon: Icons.vpn_lock,
-                      presets: _domainPresets,
-                      onAdd: () => _addDomain(_proxyDomains, _proxyDomainCtrl, 'домен'),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Заблокированные домены
-                    _buildChipSection(
-                      title: 'Заблокированные (Block)',
-                      subtitle: 'Домены, к которым будет запрещен доступ',
-                      items: _blockedDomains,
-                      controller: _blockedDomainCtrl,
-                      placeholder: 'Например: ads.example.com',
-                      icon: Icons.block,
-                      presets: _blockedPresets,
-                      onAdd: () => _addDomain(_blockedDomains, _blockedDomainCtrl, 'домен'),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Direct IP адреса
-                    _buildChipSection(
-                      title: 'IP адреса (Direct)',
-                      subtitle: 'IP адреса или подсети для прямого подключения',
-                      items: _directIps,
-                      controller: _directIpCtrl,
-                      placeholder: 'Например: 192.168.0.0/16',
-                      icon: Icons.router,
-                      presets: _ipPresets,
-                      onAdd: () => _addDomain(_directIps, _directIpCtrl, 'IP адрес'),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Кнопка сохранения
-                    SizedBox(
-                      height: 56,
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _saveSettings,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: themeManager.settings.primaryColor,
-                          foregroundColor: Colors.white,
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.save, size: 24),
-                            SizedBox(width: 12),
-                            Text('Сохранить настройки'),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
+              // ── Вкладка 2 ──────────────────────────────────
+              AppRoutingPage(
+                isVpnConnected: widget.isVpnConnected,
+                onReconnectRequest: widget.onReconnectRequest,
               ),
             ],
           ),
@@ -553,12 +512,12 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0A0E27), // Используем темный фон
+        backgroundColor: const Color(0xFF0A0E27),
         title: const Row(
           children: [
             Icon(Icons.help_outline, color: Colors.blue),
             SizedBox(width: 12),
-            Text('Справка по маршрутизации'),
+            Text('Справка маршрутизации'),
           ],
         ),
         content: SingleChildScrollView(
@@ -566,87 +525,65 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                '📍 Прямое подключение (Direct)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              const Text('Прямое подключение (Direct)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
               const Text(
-                'Домены, которые будут открываться напрямую без VPN. Например, российские сайты.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-
+                  'Домены открываются напрямую без VPN.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 16),
-
-              const Text(
-                '🔒 Принудительно через VPN (Proxy)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              const Text('Принудительно через VPN (Proxy)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
               const Text(
-                'Домены, которые всегда будут идти через VPN, независимо от других правил.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-
+                  'Домены всегда идут через VPN, независимо от других правил.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 16),
-
-              const Text(
-                '🚫 Заблокированные (Block)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              const Text('Заблокированные (Block)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 4),
+              const Text('Полностью запрещённый доступ к домену.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 16),
+              const Text('Приложения (только TUN-режим)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
               const Text(
-                'Домены, к которым будет полностью запрещен доступ. Полезно для блокировки рекламы и трекеров.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-
+                  'Выбранные приложения будут маршрутизироваться через VPN по имени процесса.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 16),
-
-              const Text(
-                '🌐 IP адреса (Direct)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              const Text('Форматы записей:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
               const Text(
-                'IP адреса или подсети, которые будут открываться напрямую. Например, локальные сети.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-
+                  '• TLD: ru, com, net\n'
+                      '• Домен: google.com, yandex.ru\n'
+                      '• Поддомены: .google.com\n'
+                      '• IP: 192.168.1.1\n'
+                      '• CIDR: 192.168.0.0/16\n'
+                      '• Точное: full:example.com\n'
+                      '• Regex: regexp:.*\\.ads\\..*',
+                  style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 16),
-
-              const Text(
-                'Примеры форматов:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '• TLD (домен верхнего уровня): ru, com, net\n'
-                    '• Домен: google.com, yandex.ru\n'
-                    '• Поддомены: .google.com (все поддомены)\n'
-                    '• IP: 192.168.1.1\n'
-                    '• Подсеть (CIDR): 192.168.0.0/16, 10.0.0.0/8\n'
-                    '• Точное совпадение: full:example.com\n'
-                    '• Regex: regexp:.*\\.ads\\..*',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-
-              const SizedBox(height: 16),
-
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  border:
+                  Border.all(color: Colors.orange.withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.lightbulb_outline, color: Colors.orange, size: 20),
+                    const Icon(Icons.lightbulb_outline,
+                        color: Colors.orange, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Совет: для зоны "ru" вводите просто ru без точки. Для всех поддоменов Google используйте .google.com',
-                        style: TextStyle(fontSize: 11, color: Colors.orange[200]),
+                        'Для зоны "ru" вводите просто ru. '
+                            'Для всех поддоменов Google — .google.com',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.orange[200]),
                       ),
                     ),
                   ],
@@ -657,9 +594,8 @@ class _ImprovedRoutingSettingsPageState extends State<ImprovedRoutingSettingsPag
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Понятно'),
-          ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Понятно')),
         ],
       ),
     );

@@ -31,18 +31,18 @@ class AppSettings {
   });
 
   Map<String, dynamic> toJson() => {
-        'localPort': localPort,
-        'directDomains': directDomains,
-        'blockedDomains': blockedDomains,
-        'directIps': directIps,
-        'proxyDomains': proxyDomains,
-        'autoStart': autoStart,
-        'minimizeToTray': minimizeToTray,
-        'startMinimized': startMinimized,
-        'pingType': pingType,
-        'autoConnectLastServer': autoConnectLastServer,
-        'lastVpnMode': lastVpnMode,
-      };
+    'localPort': localPort,
+    'directDomains': directDomains,
+    'blockedDomains': blockedDomains,
+    'directIps': directIps,
+    'proxyDomains': proxyDomains,
+    'autoStart': autoStart,
+    'minimizeToTray': minimizeToTray,
+    'startMinimized': startMinimized,
+    'pingType': pingType,
+    'autoConnectLastServer': autoConnectLastServer,
+    'lastVpnMode': lastVpnMode,
+  };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
@@ -51,22 +51,22 @@ class AppSettings {
           ? json['directDomains']
           : 'yandex.ru, vk.com',
       blockedDomains:
-          json['blockedDomains'] is String ? json['blockedDomains'] : '',
+      json['blockedDomains'] is String ? json['blockedDomains'] : '',
       directIps: json['directIps'] is String
           ? json['directIps']
           : '192.168.0.0/16, 10.0.0.0/8, 127.0.0.0/8',
       proxyDomains: json['proxyDomains'] is String ? json['proxyDomains'] : '',
       autoStart: json['autoStart'] is bool ? json['autoStart'] : false,
       minimizeToTray:
-          json['minimizeToTray'] is bool ? json['minimizeToTray'] : true,
+      json['minimizeToTray'] is bool ? json['minimizeToTray'] : true,
       startMinimized:
-          json['startMinimized'] is bool ? json['startMinimized'] : false,
+      json['startMinimized'] is bool ? json['startMinimized'] : false,
       pingType: json['pingType'] is String ? json['pingType'] : 'tcp',
       autoConnectLastServer: json['autoConnectLastServer'] is bool
           ? json['autoConnectLastServer']
           : false,
       lastVpnMode:
-          json['lastVpnMode'] is String ? json['lastVpnMode'] : 'systemProxy',
+      json['lastVpnMode'] is String ? json['lastVpnMode'] : 'systemProxy',
     );
   }
 }
@@ -81,7 +81,8 @@ class SettingsStorage {
     }
 
     try {
-      final filePath = await PortableStorage.getFilePath(_settingsFile);
+      await PortableStorage.getPortableDirectory();
+      final filePath = PortableStorage.getFilePath(_settingsFile);
       final file = File(filePath);
 
       if (await file.exists()) {
@@ -95,14 +96,15 @@ class SettingsStorage {
     } catch (e, s) {
       debugPrint('Failed to load settings: $e\n$s');
     }
-    
+
     _cachedSettings = AppSettings();
     return _cachedSettings!;
   }
 
   static Future<void> saveSettings(AppSettings settings) async {
     try {
-      final filePath = await PortableStorage.getFilePath(_settingsFile);
+      await PortableStorage.getPortableDirectory();
+      final filePath = PortableStorage.getFilePath(_settingsFile);
       final file = File(filePath);
 
       final jsonString = json.encode(settings.toJson());

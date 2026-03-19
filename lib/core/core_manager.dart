@@ -4,6 +4,7 @@ import 'service.dart';
 import '../utils/config_gen.dart';
 import 'system_proxy.dart';
 import '../storages/improved_settings_storage.dart';
+import '../storages/app_routing_storage.dart';
 import 'tun_service.dart';
 
 class CoreManager extends ChangeNotifier {
@@ -63,10 +64,15 @@ class CoreManager extends ChangeNotifier {
       final dir = await _singboxService.getXrayDir();
       await TunService.prepareWintunDll(dir);
 
+      final routingData = await AppRoutingStorage.load();
+      final vpnProcessNames = routingData.apps.toList();
+
       final singboxConfig = SingBoxChainGen.generateTunConfig(
         localSocksPort: localPort,
         serverIpToExclude: serverIpToExclude,
         settings: settings,
+        vpnProcessNames: vpnProcessNames,
+        routingMode: routingData.mode,
       );
 
       await _singboxService.start(
