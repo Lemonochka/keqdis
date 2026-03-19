@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as path;
 
@@ -98,11 +97,9 @@ class TunService {
       ).timeout(const Duration(seconds: 10));
 
       if (result.exitCode == 0) {
-        // UAC-диалог показан и пользователь согласился — завершаем текущий процесс.
         exit(0);
       }
 
-      // exitCode != 0 означает, что пользователь нажал «Нет» в UAC или произошла ошибка.
       return false;
     } catch (e) {
       return false;

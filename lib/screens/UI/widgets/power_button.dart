@@ -20,7 +20,6 @@ class PowerButton extends StatefulWidget {
 class _PowerButtonState extends State<PowerButton> {
   bool _isHovered = false;
 
-  // Статическая функция для затемнения цвета
   static Color darken(Color c, double factor) {
     final hsl = HSLColor.fromColor(c);
     return hsl.withLightness((hsl.lightness * factor).clamp(0.0, 1.0)).toColor();
@@ -36,7 +35,6 @@ class _PowerButtonState extends State<PowerButton> {
     final bottomColor = darken(themeManager.settings.secondaryColor, dim);
     final glowColor = darken(themeManager.settings.primaryColor, dim * 0.85);
 
-    // Увеличенный glow при наведении
     final hoverGlowOpacity = _isHovered && !widget.isConnecting
         ? (widget.isConnected ? 0.35 : 0.50)
         : (widget.isConnected ? 0.22 : 0.35);

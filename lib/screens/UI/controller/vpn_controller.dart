@@ -115,7 +115,6 @@ class VpnController extends ChangeNotifier {
     debugPrint('VpnController: Switching VPN mode from ${_vpnMode.name} to ${newMode.name}');
     _vpnMode = newMode;
 
-    // Сохраняем выбранный режим
     final settings = await SettingsStorage.loadSettings();
     await SettingsStorage.saveSettings(AppSettings(
       localPort: settings.localPort,
@@ -128,7 +127,7 @@ class VpnController extends ChangeNotifier {
       startMinimized: settings.startMinimized,
       pingType: settings.pingType,
       autoConnectLastServer: settings.autoConnectLastServer,
-      lastVpnMode: newMode.name, // ✅ Сохраняем режим
+      lastVpnMode: newMode.name,
     ));
 
     notifyListeners();
@@ -292,8 +291,6 @@ class VpnController extends ChangeNotifier {
     debugPrint('VpnController: Disposing...');
     _coreManager.removeListener(_onCoreStatusChanged);
 
-    // Не вызываем disconnect() здесь так как dispose не может быть async
-    // Cleanup должен происходить в main.dart через WidgetsBindingObserver
 
     super.dispose();
   }

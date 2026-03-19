@@ -19,7 +19,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   double _opacity = 0.3;
   double _blur = 10.0;
 
-  // ✅ Кеш изображения для предотвращения пересоздания при изменении размера окна
   ImageProvider? _cachedBackgroundImage;
   String? _currentBackgroundPath;
 
@@ -32,7 +31,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     _updateCachedImage();
   }
 
-  // ✅ Обновляем кеш только если путь изменился
   void _updateCachedImage() {
     final path = _themeManager.settings.backgroundImagePath;
     if (path != _currentBackgroundPath) {
@@ -53,7 +51,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
   Future<void> _pickImage() async {
     try {
-      // Показываем уведомление о начале обработки
       if (mounted) {
         CustomNotification.show(
           context,
@@ -166,14 +163,13 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ИСПРАВЛЕНИЕ: Фиксируем размер диалога чтобы он не растягивался
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.all(40),
       child: ConstrainedBox(
         constraints: const BoxConstraints(
-          maxWidth: 600, // ✅ Фиксированная ширина
-          maxHeight: 700, // ✅ Фиксированная высота
+          maxWidth: 600,
+          maxHeight: 700,
         ),
         child: _buildContent(),
       ),
@@ -184,13 +180,11 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Кастомный фон
           if (_themeManager.hasCustomBackground && _cachedBackgroundImage != null)
             Positioned.fill(
               child: _buildOptimizedBackground(),
             ),
 
-          // Контент
           Column(
             children: [
               AppBar(
@@ -201,7 +195,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
-                    // Фоновое изображение
                     Text(
                       'Фоновое изображение',
                       style: TextStyle(
@@ -235,7 +228,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               ),
                               const SizedBox(height: 8),
 
-                              // Информация об оптимизации
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -269,7 +261,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
                               const Divider(height: 24),
 
-                              // ✅ ИСПРАВЛЕНИЕ: Opacity slider с правильным диапазоном
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -295,17 +286,16 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                   overlayColor: _themeManager.settings.primaryColor.withOpacity(0.2),
                                 ),
                                 child: Slider(
-                                  value: _opacity.clamp(0.0, 1.0), // ✅ Защита от выхода за границы
+                                  value: _opacity.clamp(0.0, 1.0),
                                   min: 0.0,
                                   max: 1.0,
-                                  divisions: 100, // ✅ Увеличено для плавности
+                                  divisions: 100,
                                   label: '${(_opacity * 100).round()}%',
                                   onChanged: _updateOpacity,
                                 ),
                               ),
                               const SizedBox(height: 8),
 
-                              // ✅ ИСПРАВЛЕНИЕ: Blur slider с правильным диапазоном
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -331,10 +321,10 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                   overlayColor: _themeManager.settings.primaryColor.withOpacity(0.2),
                                 ),
                                 child: Slider(
-                                  value: _blur.clamp(0.0, 20.0), // ✅ Защита от выхода за границы
+                                  value: _blur.clamp(0.0, 20.0),
                                   min: 0.0,
                                   max: 20.0,
-                                  divisions: 40, // ✅ Увеличено для плавности
+                                  divisions: 40,
                                   label: _blur.round().toString(),
                                   onChanged: _updateBlur,
                                 ),
@@ -354,7 +344,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               ),
                               const SizedBox(height: 12),
 
-                              // Подсказка об автоматическом сжатии
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -433,7 +422,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     );
   }
 
-  // ✅ ИСПРАВЛЕНИЕ: Используем кешированное изображение
   Widget _buildOptimizedBackground() {
     return Stack(
       fit: StackFit.expand,
@@ -449,7 +437,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
         ),
         BackdropFilter(
           filter: ImageFilter.blur(
-            sigmaX: _blur.clamp(0.0, 20.0), // ✅ Защита от некорректных значений
+            sigmaX: _blur.clamp(0.0, 20.0),
             sigmaY: _blur.clamp(0.0, 20.0),
           ),
           child: Container(

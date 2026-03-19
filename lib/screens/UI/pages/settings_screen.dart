@@ -1,11 +1,12 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/storages/improved_settings_storage.dart';
 import 'package:keqdis/services/autostart_service.dart';
 import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
+import 'package:keqdis/screens/UI/controller/vpn_controller.dart';
 import 'improved_routing_settings.dart';
 
 class SettingsView extends StatefulWidget {
@@ -98,7 +99,6 @@ class _SettingsViewState extends State<SettingsView> {
         return ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            // === ЛОКАЛЬНЫЙ ПОРТ ===
             Text(
               "Основные настройки",
               style: TextStyle(
@@ -166,7 +166,6 @@ class _SettingsViewState extends State<SettingsView> {
 
             const SizedBox(height: 32),
 
-            // === ПОДМЕНЮ ===
             Text(
               "Дополнительные настройки",
               style: TextStyle(
@@ -195,9 +194,17 @@ class _SettingsViewState extends State<SettingsView> {
               "Правила для доменов, IP-адресов и блокировки",
               Icons.route,
                   () {
+                final vpn = context.read<VpnController>();
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ImprovedRoutingSettingsPage(onSettingsChanged: widget.onSettingsChanged)),
+                  MaterialPageRoute(builder: (context) => ImprovedRoutingSettingsPage(
+                    onSettingsChanged: widget.onSettingsChanged,
+                    isVpnConnected: vpn.isConnected,
+                    onReconnectRequest: () async {
+                      await vpn.disconnect();
+                      await vpn.connect();
+                    },
+                  )),
                 );
               },
             ),
@@ -217,7 +224,6 @@ class _SettingsViewState extends State<SettingsView> {
 
             const SizedBox(height: 32),
 
-            // === ВНЕШНИЙ ВИД ===
             Text(
               "Внешний вид",
               style: TextStyle(
@@ -429,7 +435,6 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
               child: _buildOptimizedBackground(context, themeManager),
             ),
 
-          // Контент
           Column(
             children: [
               AppBar(
@@ -532,8 +537,6 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
     );
   }
 }
-
-// === СТРАНИЦА: НАСТРОЙКИ МАРШРУТИЗАЦИИ ===
 
 class RoutingSettingsPage extends StatefulWidget {
   final VoidCallback? onSettingsChanged;
@@ -640,13 +643,11 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // Кастомный фон
           if (themeManager.hasCustomBackground)
             Positioned.fill(
               child: _buildOptimizedBackground(context, themeManager),
             ),
 
-          // Контент
           Column(
             children: [
               AppBar(
@@ -769,8 +770,6 @@ class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
     );
   }
 }
-
-// === СТРАНИЦА: НАСТРОЙКИ ПИНГА ===
 
 class PingSettingsPage extends StatefulWidget {
   final VoidCallback? onSettingsChanged;

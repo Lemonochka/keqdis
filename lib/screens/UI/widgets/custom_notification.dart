@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 
-// A global key for the navigator, which allows showing notifications from anywhere.
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class CustomNotification {
@@ -63,7 +62,6 @@ class CustomNotification {
 
     overlay.insert(overlayEntry);
 
-    // ✅ ИСПРАВЛЕНИЕ: Таймер теперь правильно удаляет уведомление
     dismissTimer = Timer(duration, () {
       if (overlayEntry.mounted) {
         overlayEntry.remove();

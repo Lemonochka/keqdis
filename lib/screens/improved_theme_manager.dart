@@ -58,7 +58,6 @@ class ThemeManager extends ChangeNotifier {
 
   static const int _maxImageSize = 10 * 1024 * 1024; // 10MB
 
-  // НОВОЕ: Максимальное разрешение для фона (Full HD)
   static const int _maxWidth = 1920;
   static const int _maxHeight = 1080;
 
@@ -70,7 +69,8 @@ class ThemeManager extends ChangeNotifier {
 
   Future<void> loadTheme() async {
     try {
-      final filePath = await PortableStorage.getFilePath('theme.json');
+      await PortableStorage.getPortableDirectory();
+      final filePath = PortableStorage.getFilePath('theme.json');
       final file = File(filePath);
 
       if (!await file.exists()) {
@@ -104,7 +104,8 @@ class ThemeManager extends ChangeNotifier {
 
   Future<void> saveTheme() async {
     try {
-      final filePath = await PortableStorage.getFilePath('theme.json');
+      await PortableStorage.getPortableDirectory();
+      final filePath = PortableStorage.getFilePath('theme.json');
       final file = File(filePath);
       final themeJson = JsonEncoder().convert(_settings.toJson());
       await file.writeAsString(themeJson);
@@ -114,10 +115,8 @@ class ThemeManager extends ChangeNotifier {
     }
   }
 
-  // НОВОЕ: Сжатие изображения до Full HD
   Future<Uint8List> _resizeImageToFullHD(Uint8List imageBytes) async {
     try {
-      // Декодируем изображение
       img.Image? image = img.decodeImage(imageBytes);
 
       if (image == null) {
@@ -126,7 +125,6 @@ class ThemeManager extends ChangeNotifier {
 
       debugPrint('Оригинальный размер: ${image.width}x${image.height}');
 
-      // Проверяем, нужно ли сжимать
       if (image.width <= _maxWidth && image.height <= _maxHeight) {
         debugPrint('Изображение уже подходящего размера, сжатие не требуется');
         return imageBytes;
@@ -148,7 +146,6 @@ class ThemeManager extends ChangeNotifier {
 
       debugPrint('Новый размер: ${newWidth}x${newHeight}');
 
-      // Изменяем размер с использованием высококачественного алгоритма
       img.Image resized = img.copyResize(
         image,
         width: newWidth,
@@ -156,7 +153,6 @@ class ThemeManager extends ChangeNotifier {
         interpolation: img.Interpolation.linear,
       );
 
-      // Кодируем обратно в JPEG с хорошим качеством (85%)
       final resizedBytes = Uint8List.fromList(
           img.encodeJpg(resized, quality: 85)
       );
@@ -197,7 +193,6 @@ class ThemeManager extends ChangeNotifier {
 
         final bytes = await sourceFile.readAsBytes();
 
-        // Проверка валидности изображения
         try {
           final codec = await ui.instantiateImageCodec(bytes, targetWidth: 10, targetHeight: 10);
           final frame = await codec.getNextFrame();
@@ -207,18 +202,15 @@ class ThemeManager extends ChangeNotifier {
           throw Exception('Файл не является корректным изображением');
         }
 
-        // НОВОЕ: Сжимаем изображение до Full HD
         debugPrint('Сжатие изображения до Full HD...');
         final resizedBytes = await _resizeImageToFullHD(bytes);
 
         final portableDir = await PortableStorage.getPortableDirectory();
 
         final timestamp = DateTime.now().millisecondsSinceEpoch;
-        // Всегда сохраняем как JPEG после сжатия
         final fileName = 'custom_background_$timestamp.jpg';
         final destPath = '$portableDir/$fileName';
 
-        // Удаляем старое изображение
         if (_settings.backgroundImagePath != null) {
           try {
             final oldFile = File(_settings.backgroundImagePath!);
@@ -230,7 +222,6 @@ class ThemeManager extends ChangeNotifier {
           }
         }
 
-        // Копируем сжатое изображение
         await File(destPath).writeAsBytes(resizedBytes);
 
         if (Platform.isWindows) {
@@ -246,7 +237,6 @@ class ThemeManager extends ChangeNotifier {
           }
         }
 
-        // Извлекаем цвета УЛУЧШЕННЫМ алгоритмом
         await _extractColorsFromImage(resizedBytes);
 
         _settings.backgroundImagePath = destPath;
@@ -257,7 +247,6 @@ class ThemeManager extends ChangeNotifier {
     }
   }
 
-  // ЗНАЧИТЕЛЬНО УЛУЧШЕННЫЙ алгоритм извлечения цветов
   Future<void> _extractColorsFromImage(Uint8List imageBytes) async {
     ui.Image? image;
     ui.Codec? codec;
@@ -267,23 +256,20 @@ class ThemeManager extends ChangeNotifier {
         throw Exception('Изображение слишком большое');
       }
 
-      // ОПТИМИЗАЦИЯ: Используем очень маленький размер для анализа
       codec = await ui.instantiateImageCodec(
         imageBytes,
-        targetWidth: 80,  // Увеличено с 50 для лучшего качества анализа
+        targetWidth: 80,
         targetHeight: 80,
       );
 
       final frame = await codec.getNextFrame();
       image = frame.image;
 
-      // Генерация палитры с большим количеством цветов для лучшего анализа
       final paletteGenerator = await PaletteGenerator.fromImage(
         image,
         maximumColorCount: 20, // Увеличено с 8
       );
 
-      // УЛУЧШЕННЫЙ алгоритм подбора цветов
       _settings.primaryColor = _selectPrimaryColorImproved(paletteGenerator);
       _settings.secondaryColor = _selectSecondaryColorImproved(paletteGenerator, _settings.primaryColor);
       _settings.accentColor = _selectAccentColorImproved(paletteGenerator);
@@ -299,9 +285,7 @@ class ThemeManager extends ChangeNotifier {
     }
   }
 
-  // НОВЫЙ: Улучшенный алгоритм выбора primary цвета
   Color _selectPrimaryColorImproved(PaletteGenerator palette) {
-    // Пробуем найти яркий насыщенный цвет
     final candidates = [
       palette.vibrantColor?.color,
       palette.lightVibrantColor?.color,
@@ -313,7 +297,6 @@ class ThemeManager extends ChangeNotifier {
 
       final hsl = HSLColor.fromColor(candidate);
 
-      // Ищем цвет с хорошей насыщенностью и яркостью
       if (hsl.saturation > 0.4 && hsl.lightness > 0.3 && hsl.lightness < 0.8) {
         return hsl
             .withSaturation((hsl.saturation * 1.2).clamp(0.0, 1.0))
@@ -322,7 +305,6 @@ class ThemeManager extends ChangeNotifier {
       }
     }
 
-    // Если не нашли подходящий, возвращаем модифицированный dominant
     if (palette.dominantColor != null) {
       final hsl = HSLColor.fromColor(palette.dominantColor!.color);
       return hsl
@@ -334,11 +316,9 @@ class ThemeManager extends ChangeNotifier {
     return const Color(0xFF6C63FF);
   }
 
-  // НОВЫЙ: Улучшенный алгоритм выбора secondary цвета
   Color _selectSecondaryColorImproved(PaletteGenerator palette, Color primary) {
     final primaryHsl = HSLColor.fromColor(primary);
 
-    // Ищем цвет с отличающимся оттенком
     final candidates = [
       palette.lightVibrantColor?.color,
       palette.vibrantColor?.color,
@@ -350,9 +330,8 @@ class ThemeManager extends ChangeNotifier {
 
       final hsl = HSLColor.fromColor(candidate);
 
-      // Проверяем, что оттенок достаточно отличается
       final hueDiff = (hsl.hue - primaryHsl.hue).abs();
-      if (hueDiff > 30 && hueDiff < 330) { // Не слишком близко и не противоположный
+      if (hueDiff > 30 && hueDiff < 330) {
         return hsl
             .withSaturation((hsl.saturation * 1.1).clamp(0.0, 1.0))
             .withLightness(0.6)
@@ -360,17 +339,14 @@ class ThemeManager extends ChangeNotifier {
       }
     }
 
-    // Если не нашли подходящий, создаем комплементарный к primary
     return primaryHsl
-        .withHue((primaryHsl.hue + 120) % 360) // Триадный цвет
+        .withHue((primaryHsl.hue + 120) % 360)
         .withSaturation(0.65)
         .withLightness(0.6)
         .toColor();
   }
 
-  // НОВЫЙ: Улучшенный алгоритм выбора accent цвета
   Color _selectAccentColorImproved(PaletteGenerator palette) {
-    // Ищем темный приглушенный цвет для фона
     final candidates = [
       palette.darkMutedColor?.color,
       palette.darkVibrantColor?.color,
@@ -382,7 +358,6 @@ class ThemeManager extends ChangeNotifier {
 
       final hsl = HSLColor.fromColor(candidate);
 
-      // Хотим темный цвет с низкой насыщенностью
       if (hsl.lightness < 0.3) {
         return hsl
             .withSaturation((hsl.saturation * 0.4).clamp(0.0, 1.0))
@@ -391,7 +366,6 @@ class ThemeManager extends ChangeNotifier {
       }
     }
 
-    // Если не нашли, используем dominant но делаем очень темным
     if (palette.dominantColor != null) {
       final hsl = HSLColor.fromColor(palette.dominantColor!.color);
       return hsl

@@ -46,10 +46,7 @@ class VpnModeSwitch extends StatelessWidget {
             label: 'TUN',
             icon: Icons.shield,
             isSelected: currentMode == VpnMode.tun,
-            // Кнопка всегда кликабельна.
-            // Если нет прав админа — home_screen перехватит вызов и покажет UAC-диалог.
             onTap: () => onModeChanged(VpnMode.tun),
-            // Показываем визуальную подсказку что нужны права, но не блокируем клик
             needsAdmin: !tunAvailable,
           ),
         ],
@@ -79,7 +76,6 @@ class VpnModeSwitch extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: InkWell(
-        // Блокируем только если уже подключены (смена режима на лету через диалог)
         onTap: isConnected ? null : onTap,
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
@@ -103,7 +99,6 @@ class VpnModeSwitch extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                // Если нужны права — иконка с замочком-оттенком, но не серая
                 color: needsAdmin
                     ? Colors.white54
                     : isSelected
@@ -123,7 +118,6 @@ class VpnModeSwitch extends StatelessWidget {
                       : Colors.white70,
                 ),
               ),
-              // Маленький значок щита если нужны права
               if (needsAdmin) ...[
                 const SizedBox(width: 4),
                 const Icon(

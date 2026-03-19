@@ -37,214 +37,145 @@ class ServerListItem extends StatelessWidget {
     final canSelect = !isAnyServerConnected || isConnected;
 
     return Opacity(
-        opacity: canSelect ? 1.0 : 0.5,
-        child: Card(
-          color: isSelected
-              ? themeManager.settings.primaryColor.withAlpha(51)
-              : themeManager.settings.accentColor.withAlpha(77),
-          elevation: isSelected ? 6 : 2,
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: isSelected
-                ? BorderSide(color: themeManager.settings.primaryColor, width: 2)
-                : BorderSide.none,
-          ),
-          child: InkWell(
-            onTap: canSelect ? onTap : null,
-            borderRadius: BorderRadius.circular(12),
-            splashFactory: NoSplash.splashFactory,
-            highlightColor: Colors.transparent,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  // Флаг в круглом 3D контейнере
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF2D3748),
-                          Color(0xFF1A202C),
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(102),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                        BoxShadow(
-                          color: Colors.white.withAlpha(13),
-                          blurRadius: 4,
-                          offset: const Offset(-2, -2),
-                        ),
-                      ],
-                    ),
-                    child: Container(
-                      margin: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withAlpha(26),
-                          width: 1,
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.grey.shade700,
-                              Colors.grey.shade900,
-                            ],
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.public,
-                          color: Colors.white54,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
+      opacity: canSelect ? 1.0 : 0.5,
+      child: Card(
+        color: isSelected
+            ? themeManager.settings.primaryColor.withAlpha(51)
+            : themeManager.settings.accentColor.withAlpha(77),
+        elevation: isSelected ? 6 : 2,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: isSelected
+              ? BorderSide(color: themeManager.settings.primaryColor, width: 2)
+              : BorderSide.none,
+        ),
+        child: InkWell(
+          onTap: canSelect ? onTap : null,
+          borderRadius: BorderRadius.circular(12),
+          splashFactory: NoSplash.splashFactory,
+          highlightColor: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                _CountryFlagAvatar(displayName: server.displayName),
 
-                  const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-                  // Информация (название + статус)
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                ServerNameUtils.cleanDisplayName(server.displayName),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected
-                                      ? themeManager.settings.primaryColor
-                                      : Colors.white,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        // Источник
-                        Row(
-                          children: [
-                            Icon(
-                              server.subscriptionId != null
-                                  ? Icons.rss_feed
-                                  : Icons.edit,
-                              size: 11,
-                              color: Colors.white.withAlpha(128),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                server.subscriptionId != null
-                                    ? server.subscriptionName ?? 'Подписка'
-                                    : 'Добавлен вручную',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white.withAlpha(153),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Пинг (справа)
-                  if (pingResult != null) ...[
-                    const SizedBox(width: 12),
-                    _buildPingInfo(pingResult!),
-                  ],
-
-                  const SizedBox(width: 12),
-
-                  // Кнопки действий
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                // Информация (название + источник)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Пинг
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: IconButton(
-                          icon: isPinging
-                              ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                              : const Icon(Icons.speed, size: 16),
-                          color: Colors.white70,
-                          onPressed: isPinging ? null : onPing,
-                          tooltip: 'Проверить пинг',
-                          padding: EdgeInsets.zero,
+                      Text(
+                        ServerNameUtils.cleanDisplayName(server.displayName),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? themeManager.settings.primaryColor
+                              : Colors.white,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-
-                      const SizedBox(width: 4),
-
-                      // Избранное
-                      SizedBox(
-                        width: 32,
-                        height: 28,
-                        child: IconButton(
-                          icon: Icon(
-                            server.isFavorite ? Icons.star : Icons.star_border,
-                            color: server.isFavorite ? Colors.amber : Colors.white54,
-                            size: 18,
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(
+                            server.subscriptionId != null
+                                ? Icons.rss_feed
+                                : Icons.edit,
+                            size: 11,
+                            color: Colors.white.withAlpha(128),
                           ),
-                          onPressed: onFavoriteToggle,
-                          tooltip: 'Избранное',
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-
-                      // Удалить
-                      SizedBox(
-                        width: 32,
-                        height: 28,
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.white54,
-                            size: 18,
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              server.subscriptionId != null
+                                  ? server.subscriptionName ?? 'Подписка'
+                                  : 'Добавлен вручную',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withAlpha(153),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          onPressed: onDelete,
-                          tooltip: 'Удалить',
-                          padding: EdgeInsets.zero,
-                        ),
+                        ],
                       ),
                     ],
                   ),
+                ),
+
+                // Пинг
+                if (pingResult != null) ...[
+                  const SizedBox(width: 12),
+                  _buildPingInfo(pingResult!),
                 ],
-              ),
+
+                const SizedBox(width: 12),
+
+                // Кнопки действий
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: IconButton(
+                        icon: isPinging
+                            ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                            : const Icon(Icons.speed, size: 16),
+                        color: Colors.white70,
+                        onPressed: isPinging ? null : onPing,
+                        tooltip: 'Проверить пинг',
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 32,
+                      height: 28,
+                      child: IconButton(
+                        icon: Icon(
+                          server.isFavorite ? Icons.star : Icons.star_border,
+                          color: server.isFavorite ? Colors.amber : Colors.white54,
+                          size: 18,
+                        ),
+                        onPressed: onFavoriteToggle,
+                        tooltip: 'Избранное',
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 32,
+                      height: 28,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.white54,
+                          size: 18,
+                        ),
+                        onPressed: onDelete,
+                        tooltip: 'Удалить',
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        )
+        ),
+      ),
     );
   }
 
@@ -283,6 +214,90 @@ class ServerListItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CountryFlagAvatar extends StatelessWidget {
+  final String displayName;
+
+  const _CountryFlagAvatar({required this.displayName});
+
+  @override
+  Widget build(BuildContext context) {
+    final countryCode = ServerNameUtils.extractCountryCode(displayName);
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(102),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.white.withAlpha(13),
+            blurRadius: 4,
+            offset: const Offset(-2, -2),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          ClipOval(
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: countryCode != null
+                  ? FittedBox(
+                fit: BoxFit.cover,
+                clipBehavior: Clip.hardEdge,
+                child: CountryFlag.fromCountryCode(
+                  countryCode,
+                  height: 48,
+                  width: 72,
+                ),
+              )
+                  : Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.grey.shade700, Colors.grey.shade900],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.public,
+                  color: Colors.white54,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withAlpha(26),
+                width: 1.5,
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withAlpha(20),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

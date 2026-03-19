@@ -54,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen>
   AppSettings _settings = AppSettings();
   bool _tunAvailable = false;
   bool _isReallyExiting = false;
+  bool _isInitialized = false;
 
   Timer? _autoUpdateTimer;
 
@@ -101,8 +102,15 @@ class _HomeScreenState extends State<HomeScreen>
       if (_settings.autoConnectLastServer && !widget.startMinimized) {
         await _vpnController.autoConnectToLastServer();
       }
+
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
     } catch (e) {
       debugPrint('Ошибка инициализации: $e');
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
     }
   }
 
@@ -427,46 +435,57 @@ class _HomeScreenState extends State<HomeScreen>
         ChangeNotifierProvider.value(value: _pingManager),
         ChangeNotifierProvider.value(value: _themeManager),
       ],
-      child: Scaffold(
-        body: Stack(
-          children: [
-            if (_themeManager.hasCustomBackground && _cachedBackgroundImageProvider != null)
-              Positioned.fill(
-                child: _buildOptimizedBackground(context),
-              ),
-            Row(
-              children: [
-                HomeSidebar(
-                  currentTab: _currentTab,
-                  onTabChanged: (tab) => setState(() => _currentTab = tab),
-                ),
-                Container(
-                  width: 1,
-                  color: Colors.white.withAlpha(26), // 0.1 opacity
-                ),
-                Expanded(
-                  child: HomeMainContent(
-                    currentTab: _currentTab,
-                    settings: _settings,
-                    tunAvailable: _tunAvailable,
-                    searchController: _searchController,
-                    onSearchChanged: _onSearchChanged,
-                    onClearSearch: () {
-                      _searchController.clear();
-                      _vpnController.searchServers('');
-                    },
-                    onAddServer: _showAddServerDialog,
-                    onPingAll: _pingAllServers,
-                    onPing: _pingServer,
-                    serverPingingState: _serverPingingState,
-                    onVpnModeChanged: _handleVpnModeSwitch,
-                    onSettingsChanged: _loadSettings,
-                  ),
-                ),
-              ],
+      child: _isInitialized ? _buildMainContent() : _buildLoadingScreen(),
+    );
+  }
+
+  Widget _buildLoadingScreen() {
+    return const Scaffold(
+      backgroundColor: Color(0xFF0A0E27),
+      body: SizedBox.expand(),
+    );
+  }
+
+  Widget _buildMainContent() {
+    return Scaffold(
+      body: Stack(
+        children: [
+          if (_themeManager.hasCustomBackground && _cachedBackgroundImageProvider != null)
+            Positioned.fill(
+              child: _buildOptimizedBackground(context),
             ),
-          ],
-        ),
+          Row(
+            children: [
+              HomeSidebar(
+                currentTab: _currentTab,
+                onTabChanged: (tab) => setState(() => _currentTab = tab),
+              ),
+              Container(
+                width: 1,
+                color: Colors.white.withAlpha(26), // 0.1 opacity
+              ),
+              Expanded(
+                child: HomeMainContent(
+                  currentTab: _currentTab,
+                  settings: _settings,
+                  tunAvailable: _tunAvailable,
+                  searchController: _searchController,
+                  onSearchChanged: _onSearchChanged,
+                  onClearSearch: () {
+                    _searchController.clear();
+                    _vpnController.searchServers('');
+                  },
+                  onAddServer: _showAddServerDialog,
+                  onPingAll: _pingAllServers,
+                  onPing: _pingServer,
+                  serverPingingState: _serverPingingState,
+                  onVpnModeChanged: _handleVpnModeSwitch,
+                  onSettingsChanged: _loadSettings,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

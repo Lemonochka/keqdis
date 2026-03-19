@@ -44,7 +44,6 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
   Future<void> _saveSettings() async {
     final currentSettings = await SettingsStorage.loadSettings();
 
-    // ✅ ИСПРАВЛЕНИЕ: Сохраняем все поля включая lastVpnMode
     final settings = AppSettings(
       localPort: currentSettings.localPort,
       directDomains: currentSettings.directDomains,
@@ -52,7 +51,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
       directIps: currentSettings.directIps,
       proxyDomains: currentSettings.proxyDomains,
       pingType: currentSettings.pingType,
-      lastVpnMode: currentSettings.lastVpnMode, // ✅ Добавлено
+      lastVpnMode: currentSettings.lastVpnMode,
       autoStart: _autoStart,
       minimizeToTray: _minimizeToTray,
       startMinimized: _startMinimized,

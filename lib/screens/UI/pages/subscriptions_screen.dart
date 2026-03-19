@@ -130,7 +130,6 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
       }
 
       try {
-        // Добавляем подписку
         final subscription = await SubscriptionService.addSubscription(
           name: name,
           url: url,
@@ -144,7 +143,6 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
         );
         _loadSubscriptions();
 
-        // Сразу же загружаем серверы из подписки
         final updateResult = await SubscriptionService.updateSubscriptionServers(subscription);
 
         if (updateResult.success) {
@@ -154,7 +152,7 @@ class _SubscriptionsViewState extends State<SubscriptionsView> {
             type: NotificationType.success,
           );
           _loadSubscriptions();
-          widget.onServersUpdated(); // Обновляем список серверов
+          widget.onServersUpdated();
         } else {
           CustomNotification.show(
             context,
