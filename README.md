@@ -94,13 +94,6 @@ flutter build windows --release
 
 ##
 
-| UI | Flutter / Dart |
-| VPN backend | Xray-core, sing-box |
-| TUN driver | WinTun |
-| Менеджер окон | window_manager |
-| Состояние | Provider |
-| Хранилище | JSON-файлы (portable) |
-
 <div align="center">
-  <sub>Сделано с Flutter ❤️</sub>
+  <sub>Сделано с Flutter для моих друзяшек и тд❤️</sub>
 </div>
