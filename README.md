@@ -15,7 +15,7 @@
 
 ## О проекте
 
-KEQDIS — VPN-клиент с графическим интерфейсом на Flutter. Использует [Xray-core](https://github.com/XTLS/Xray-core) и [sing-box](https://github.com/SagerNet/sing-box), поддерживает гибкую маршрутизацию трафика.
+KEQDIS — Proxy-клиент с графическим интерфейсом на Flutter. Использует [Xray-core](https://github.com/XTLS/Xray-core) и [sing-box](https://github.com/SagerNet/sing-box), поддерживает гибкую маршрутизацию трафика.
 
 Доступен для **Windows** и **Android**.
 
