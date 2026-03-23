@@ -96,8 +96,6 @@ flutter pub get
 # Windows
 flutter build windows --release
 
-# Android
-flutter build apk --release --target-platform android-arm64
 ```
 
 ### Бинарные зависимости (Windows)
@@ -111,14 +109,6 @@ flutter build apk --release --target-platform android-arm64
 | `wintun.dll` | [wintun.net](https://www.wintun.net) |
 | `geoip.dat` | [v2fly/geoip](https://github.com/v2fly/geoip/releases) |
 | `geosite.dat` | [v2fly/domain-list-community](https://github.com/v2fly/domain-list-community/releases) |
-
-### Бинарные зависимости (Android)
-
-Положите в `assets/singbox/`:
-
-| Файл | Источник |
-|------|---------|
-| `sing-box` | [SagerNet/sing-box](https://github.com/SagerNet/sing-box/releases) (linux-android-arm64) |
 
 ---
 
