@@ -36,18 +36,14 @@ class ConfigGeneratorV2 {
       "protocol": "vless",
       "tag": "proxy",
       "settings": {
-        "vnext": [
-          {
-            "address": address,
-            "port": port,
-            "users": [
-              {"id": uuid, "encryption": "none", "flow": getParam('flow')}
-            ]
-          }
-        ]
+        "address": address,
+        "port": port,
+        "id": uuid,
+        "flow": getParam('flow'),
+        "encryption": getParam('encryption', 'none')
       },
       "streamSettings": <String, dynamic>{
-        "network": getParam('type', 'tcp'),
+        "network": getParam('type', 'raw'),
         "security": getParam('security', 'none'),
       }
     };
@@ -65,15 +61,13 @@ class ConfigGeneratorV2 {
     if (security == 'tls') {
       stream['tlsSettings'] = {
         "serverName": sni,
-        "allowInsecure": false,
         "fingerprint": getParam('fp', '')
       };
     } else if (security == 'reality') {
       stream['realitySettings'] = {
-        "show": false,
         "fingerprint": getParam('fp', 'chrome'),
         "serverName": sni,
-        "publicKey": getParam('pbk'),
+        "password": getParam('pbk'),
         "shortId": getParam('sid'),
         "spiderX": getParam('spx')
       };
@@ -141,7 +135,6 @@ class ConfigGeneratorV2 {
 
     if (mode == VpnMode.systemProxy) {
       rules.add({
-        "type": "field",
         "port": "53",
         "network": "udp",
         "outboundTag": "dns-out"
@@ -149,38 +142,37 @@ class ConfigGeneratorV2 {
     }
 
     rules.add({
-      "type": "field",
       "ip": ["169.254.0.0/16", "224.0.0.0/4", "255.255.255.255/32"],
       "outboundTag": "block"
     });
 
     if (blockedDomains.isNotEmpty) {
-      rules.add({"type": "field", "domain": blockedDomains, "outboundTag": "block"});
+      rules.add({"domain": blockedDomains, "outboundTag": "block"});
     }
 
     if (mode == VpnMode.systemProxy) {
       final isIpAddress = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(address);
       if (isIpAddress) {
-        rules.add({"type": "field", "ip": [address], "outboundTag": "direct"});
+        rules.add({"ip": [address], "outboundTag": "direct"});
       } else {
-        rules.add({"type": "field", "domain": ["full:$address"], "outboundTag": "direct"});
+        rules.add({"domain": ["full:$address"], "outboundTag": "direct"});
       }
     }
 
     if (directDomains.isNotEmpty) {
-      rules.add({"type": "field", "domain": directDomains, "outboundTag": "direct"});
+      rules.add({"domain": directDomains, "outboundTag": "direct"});
     }
     if (directIps.isNotEmpty) {
-      rules.add({"type": "field", "ip": directIps, "outboundTag": "direct"});
+      rules.add({"ip": directIps, "outboundTag": "direct"});
     }
 
-    rules.add({"type": "field", "ip": ["geoip:private"], "outboundTag": "direct"});
+    rules.add({"ip": ["geoip:private"], "outboundTag": "direct"});
 
     if (proxyDomains.isNotEmpty) {
-      rules.add({"type": "field", "domain": proxyDomains, "outboundTag": "proxy"});
+      rules.add({"domain": proxyDomains, "outboundTag": "proxy"});
     }
 
-    rules.add({"type": "field", "outboundTag": "proxy", "network": "tcp,udp"});
+    rules.add({"outboundTag": "proxy", "network": "tcp,udp"});
 
     final config = <String, dynamic>{
       "log": {"loglevel": "warning"},
@@ -211,7 +203,7 @@ class ConfigGeneratorV2 {
         "port": settings.localPort,
         "listen": "127.0.0.1",
         "protocol": "socks",
-        "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"},
+        "settings": {"udp": true, "ip": "127.0.0.1"},
         "sniffing": {
           "enabled": true,
           "destOverride": ["http", "tls", "quic", "fakedns"]
@@ -223,7 +215,7 @@ class ConfigGeneratorV2 {
         "port": settings.localPort,
         "listen": "127.0.0.1",
         "protocol": "mixed",
-        "settings": {"allowTransparent": false, "udpEnabled": true},
+        "settings": {"udpEnabled": true},
         "sniffing": {
           "enabled": true,
           "destOverride": ["http", "tls", "quic", "fakedns"]
