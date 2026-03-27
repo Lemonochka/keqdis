@@ -15,39 +15,42 @@ class ServerSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = ThemeManager();
+    final s = ThemeManager().settings;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: themeManager.settings.accentColor.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        color:        s.searchBarColor,
+        borderRadius: BorderRadius.circular(20), // pill-форма
+        // Без border
       ),
       child: TextField(
         controller: controller,
-        onChanged: onChanged,
-        style: const TextStyle(color: Colors.white),
+        onChanged:  onChanged,
+        style: TextStyle(
+          color:    s.textColor,
+          fontSize: 14,
+        ),
         decoration: InputDecoration(
-          hintText: 'Поиск серверов...',
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+          hintText:  'Поиск серверов...',
+          hintStyle: TextStyle(
+            color:    s.secondaryTextColor.withOpacity(0.5),
+            fontSize: 14,
+          ),
           prefixIcon: Icon(
             Icons.search,
-            color: themeManager.settings.primaryColor,
+            color: s.primaryColor,
+            size:  20,
           ),
           suffixIcon: controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.white54),
-                  onPressed: onClear,
-                )
+            icon: Icon(Icons.close, color: s.secondaryTextColor, size: 18),
+            onPressed: onClear,
+          )
               : null,
-          border: InputBorder.none,
+          border:          InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 12,
+            vertical:   12,
           ),
         ),
       ),

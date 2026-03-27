@@ -31,185 +31,216 @@ class ServerListItem extends StatelessWidget {
     this.isAnyServerConnected = false,
   });
 
+  // Извлекаем протокол из displayName или subscriptionName
+  String? _extractProtocol() {
+    final name = '${server.displayName} ${server.subscriptionName ?? ''}'.toUpperCase();
+    if (name.contains('VLESS'))  return 'VLESS';
+    if (name.contains('VMESS'))  return 'VMess';
+    if (name.contains('TROJAN')) return 'Trojan';
+    if (name.contains('SS'))     return 'SS';
+    if (name.contains('HYSTERIA')) return 'Hysteria';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager();
+    final s = themeManager.settings;
     final canSelect = !isAnyServerConnected || isConnected;
+    final protocol  = _extractProtocol();
 
     return Opacity(
       opacity: canSelect ? 1.0 : 0.5,
-      child: Card(
-        color: isSelected
-            ? themeManager.settings.primaryColor.withAlpha(51)
-            : themeManager.settings.accentColor.withAlpha(77),
-        elevation: isSelected ? 6 : 2,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: isSelected
-              ? BorderSide(color: themeManager.settings.primaryColor, width: 2)
-              : BorderSide.none,
+        decoration: BoxDecoration(
+          color: isConnected
+              ? s.primaryColor.withOpacity(0.18)
+              : s.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isConnected
+                ? s.primaryColor.withOpacity(0.5)
+                : s.borderColor,
+            width: isConnected ? 1.5 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color:      Colors.black.withOpacity(s.isDarkMode ? 0.15 : 0.05),
+              blurRadius: 6,
+              offset:     const Offset(0, 2),
+            ),
+          ],
         ),
-        child: InkWell(
-          onTap: canSelect ? onTap : null,
-          borderRadius: BorderRadius.circular(12),
-          splashFactory: NoSplash.splashFactory,
-          highlightColor: Colors.transparent,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                _CountryFlagAvatar(displayName: server.displayName),
-
-                const SizedBox(width: 12),
-
-                // Информация (название + источник)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        ServerNameUtils.cleanDisplayName(server.displayName),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? themeManager.settings.primaryColor
-                              : Colors.white,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(
-                            server.subscriptionId != null
-                                ? Icons.rss_feed
-                                : Icons.edit,
-                            size: 11,
-                            color: Colors.white.withAlpha(128),
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              server.subscriptionId != null
-                                  ? server.subscriptionName ?? 'Подписка'
-                                  : 'Добавлен вручную',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white.withAlpha(153),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Пинг
-                if (pingResult != null) ...[
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap:        canSelect ? onTap : null,
+            borderRadius: BorderRadius.circular(16),
+            splashColor:  s.primaryColor.withOpacity(0.1),
+            highlightColor: Colors.transparent,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              child: Row(
+                children: [
+                  // Флаг страны (круглый)
+                  _CountryFlagAvatar(displayName: server.displayName),
                   const SizedBox(width: 12),
-                  _buildPingInfo(pingResult!),
-                ],
 
-                const SizedBox(width: 12),
+                  // Название + протокол + пинг
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          ServerNameUtils.cleanDisplayName(server.displayName),
+                          style: TextStyle(
+                            fontSize:   15,
+                            fontWeight: FontWeight.w600,
+                            color: isConnected
+                                ? s.primaryColor
+                                : s.textColor,
+                          ),
+                          maxLines:  1,
+                          overflow:  TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            // Protocol badge
+                            if (protocol != null) ...[
+                              _ProtocolBadge(label: protocol, settings: s),
+                              const SizedBox(width: 8),
+                            ],
+                            // Ping
+                            if (pingResult != null)
+                              _PingBadge(result: pingResult!),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
 
-                // Кнопки действий
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 32,
-                      height: 32,
-                      child: IconButton(
+                  const SizedBox(width: 8),
+
+                  // Кнопки действий
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Кнопка "пинг"
+                      _ActionIconBtn(
                         icon: isPinging
                             ? const SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 14, height: 14,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                            : const Icon(Icons.speed, size: 16),
-                        color: Colors.white70,
-                        onPressed: isPinging ? null : onPing,
+                            : Icon(Icons.speed, size: 16, color: s.secondaryTextColor),
+                        onTap: isPinging ? null : onPing,
                         tooltip: 'Проверить пинг',
-                        padding: EdgeInsets.zero,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    SizedBox(
-                      width: 32,
-                      height: 28,
-                      child: IconButton(
+                      const SizedBox(width: 4),
+
+                      // Звезда / избранное
+                      _ActionIconBtn(
                         icon: Icon(
                           server.isFavorite ? Icons.star : Icons.star_border,
-                          color: server.isFavorite ? Colors.amber : Colors.white54,
-                          size: 18,
+                          size:  18,
+                          color: server.isFavorite ? Colors.amber : s.secondaryTextColor,
                         ),
-                        onPressed: onFavoriteToggle,
+                        onTap: onFavoriteToggle,
                         tooltip: 'Избранное',
-                        padding: EdgeInsets.zero,
                       ),
-                    ),
-                    SizedBox(
-                      width: 32,
-                      height: 28,
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.white54,
-                          size: 18,
+                      const SizedBox(width: 4),
+
+                      // Если подключён — кнопка-пауза вместо удаления
+                      if (isConnected)
+                        Container(
+                          width: 32, height: 32,
+                          decoration: BoxDecoration(
+                            color:        s.primaryColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.pause, size: 18, color: s.primaryColor),
+                        )
+                      else
+                        _ActionIconBtn(
+                          icon: Icon(Icons.delete_outline, size: 18, color: s.secondaryTextColor),
+                          onTap: onDelete,
+                          tooltip: 'Удалить',
                         ),
-                        onPressed: onDelete,
-                        tooltip: 'Удалить',
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildPingInfo(PingResult result) {
-    Color color;
-    String text;
+// ─── Protocol badge ────────────────────────────────────────────────────────────
+class _ProtocolBadge extends StatelessWidget {
+  final String label;
+  final ThemeSettings settings;
 
-    if (!result.success) {
-      color = Colors.red;
-      text = 'Недоступен';
-    } else if (result.latencyMs! < 100) {
-      color = Colors.green;
-      text = '${result.latencyMs}мс';
-    } else if (result.latencyMs! < 300) {
-      color = Colors.orange;
-      text = '${result.latencyMs}мс';
-    } else {
-      color = Colors.red;
-      text = '${result.latencyMs}мс';
-    }
+  const _ProtocolBadge({required this.label, required this.settings});
 
-    return Row(
-      children: [
-        Icon(
-          result.success ? Icons.speed : Icons.error_outline,
-          size: 11,
-          color: color,
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color:        settings.protocolBadgeBg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize:   11,
+          fontWeight: FontWeight.w600,
+          color:      settings.protocolBadgeText,
         ),
+      ),
+    );
+  }
+}
+
+// ─── Ping badge ────────────────────────────────────────────────────────────────
+class _PingBadge extends StatelessWidget {
+  final PingResult result;
+  const _PingBadge({required this.result});
+
+  Color get _color {
+    if (!result.success) return Colors.red;
+    final ms = result.latencyMs!;
+    if (ms < 100)  return const Color(0xFF4CAF50);
+    if (ms < 300)  return Colors.orange;
+    return Colors.red;
+  }
+
+  String get _text {
+    if (!result.success) return 'Недоступен';
+    return '${result.latencyMs} ms';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.network_ping, size: 14, color: _color),
         const SizedBox(width: 3),
         Text(
-          text,
+          _text,
           style: TextStyle(
-            fontSize: 10,
-            color: color,
+            fontSize:   13,
+            color:      _color,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -218,85 +249,74 @@ class ServerListItem extends StatelessWidget {
   }
 }
 
+// ─── Маленькая кнопка-иконка ──────────────────────────────────────────────────
+class _ActionIconBtn extends StatelessWidget {
+  final Widget icon;
+  final VoidCallback? onTap;
+  final String tooltip;
+
+  const _ActionIconBtn({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(width: 30, height: 30, child: Center(child: icon)),
+      ),
+    );
+  }
+}
+
+// ─── Круглый флаг страны (44dp) ───────────────────────────────────────────────
 class _CountryFlagAvatar extends StatelessWidget {
   final String displayName;
-
   const _CountryFlagAvatar({required this.displayName});
 
   @override
   Widget build(BuildContext context) {
     final countryCode = ServerNameUtils.extractCountryCode(displayName);
+    final isDark = ThemeManager().settings.isDarkMode;
 
     return Container(
-      width: 48,
-      height: 48,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(102),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: Colors.white.withAlpha(13),
-            blurRadius: 4,
-            offset: const Offset(-2, -2),
+            color:      Colors.black.withOpacity(isDark ? 0.35 : 0.12),
+            blurRadius: 6,
+            offset:     const Offset(0, 3),
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          ClipOval(
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: countryCode != null
-                  ? FittedBox(
-                fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
-                child: CountryFlag.fromCountryCode(
-                  countryCode,
-                  height: 48,
-                  width: 72,
-                ),
-              )
-                  : Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.grey.shade700, Colors.grey.shade900],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.public,
-                  color: Colors.white54,
-                  size: 24,
-                ),
-              ),
-            ),
+      child: ClipOval(
+        child: countryCode != null
+            ? FittedBox(
+          fit:          BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: CountryFlag.fromCountryCode(
+            countryCode,
+            height: 44,
+            width:  66,
           ),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withAlpha(26),
-                width: 1.5,
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withAlpha(20),
-                  Colors.transparent,
-                ],
-              ),
-            ),
+        )
+            : Container(
+          color: isDark
+              ? const Color(0xFF3A2020)
+              : const Color(0xFFFFD6D6),
+          child: Icon(
+            Icons.public,
+            color: isDark ? Colors.white38 : Colors.pink.shade200,
+            size:  22,
           ),
-        ],
+        ),
       ),
     );
   }
