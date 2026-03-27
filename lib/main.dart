@@ -51,6 +51,9 @@ void main() async {
   await windowManager.setMinimumSize(windowOptions.minimumSize!);
   await windowManager.center();
 
+  // FIX: Перехватываем закрытие окна для гарантированной очистки
+  await windowManager.setPreventClose(true);
+
   if (!shouldStartMinimized) {
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
@@ -74,12 +77,14 @@ Future<void> _killLegacyProcesses() async {
     await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
     debugPrint('Killed legacy xray.exe');
   } catch (e) {
+    // Процесс не был запущен — ОК
   }
 
   try {
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
     debugPrint('Killed legacy sing-box.exe');
   } catch (e) {
+    // Процесс не был запущен — ОК
   }
 }
 
@@ -97,29 +102,39 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+// FIX: Добавлен WindowListener для надёжного перехвата закрытия на Windows
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver, WindowListener {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // FIX: Подписываемся на события окна
+    windowManager.addListener(this);
     debugPrint('App lifecycle observer registered');
   }
 
   @override
   void dispose() {
+    // FIX: Отписываемся от событий окна
+    windowManager.removeListener(this);
     WidgetsBinding.instance.removeObserver(this);
     debugPrint('App lifecycle observer removed');
     super.dispose();
   }
 
+  // FIX: Используем onWindowClose вместо ненадёжного didChangeAppLifecycleState
   @override
-  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
-    debugPrint('App lifecycle state changed: $state');
+  void onWindowClose() async {
+    debugPrint('Window close requested, running cleanup...');
+    await _cleanupOnExit();
+    await windowManager.destroy();
+  }
 
-    if (state == AppLifecycleState.detached) {
-      debugPrint('App is closing, running cleanup...');
-      await _cleanupOnExit();
-    }
+  @override
+  Future<bool> didChangeAppLifecycleState(AppLifecycleState state) async {
+    debugPrint('App lifecycle state changed: $state');
+    // FIX: Убрали обработку detached — теперь очистка через onWindowClose
+    return false;
   }
 
   Future<void> _cleanupOnExit() async {
@@ -127,34 +142,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       debugPrint('Cleanup: Stopping VPN processes...');
 
       if (Platform.isWindows) {
-        try {
-          final xrayResult = await Process.run(
-            'taskkill',
-            ['/F', '/IM', 'xray.exe'],
-            runInShell: false,
-          ).timeout(const Duration(seconds: 2));
-          debugPrint('Cleanup: xray.exe killed (exit code: ${xrayResult.exitCode})');
-        } catch (e) {
-          debugPrint('Cleanup: xray.exe not running or failed to kill: $e');
-        }
-
-        try {
-          final singboxResult = await Process.run(
-            'taskkill',
-            ['/F', '/IM', 'sing-box.exe'],
-            runInShell: false,
-          ).timeout(const Duration(seconds: 2));
-          debugPrint('Cleanup: sing-box.exe killed (exit code: ${singboxResult.exitCode})');
-        } catch (e) {
-          debugPrint('Cleanup: sing-box.exe not running or failed to kill: $e');
-        }
+        // FIX: Запускаем kill процессов параллельно для ускорения
+        await Future.wait([
+          _killProcess('xray.exe'),
+          _killProcess('sing-box.exe'),
+        ]);
       }
 
       debugPrint('Cleanup: Clearing system proxy...');
       await SystemProxy.clearProxy().timeout(const Duration(seconds: 2));
       debugPrint('Cleanup: System proxy cleared');
 
-      // Освобождаем lock файл
       debugPrint('Cleanup: Releasing instance lock...');
       await SingleInstanceManager.release();
       debugPrint('Cleanup: Instance lock released');
@@ -162,6 +160,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       debugPrint('Cleanup completed successfully');
     } catch (e, s) {
       debugPrint('Cleanup error: $e\n$s');
+    }
+  }
+
+  // FIX: Вынесенный метод для убийства процесса
+  Future<void> _killProcess(String exeName) async {
+    try {
+      final result = await Process.run(
+        'taskkill',
+        ['/F', '/IM', exeName],
+        runInShell: false,
+      ).timeout(const Duration(seconds: 2));
+      debugPrint('Cleanup: $exeName killed (exit code: ${result.exitCode})');
+    } catch (e) {
+      debugPrint('Cleanup: $exeName not running or failed to kill: $e');
     }
   }
 
