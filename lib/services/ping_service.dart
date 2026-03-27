@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+/// Тип пинга — используется в ping_manager.dart и server_list_item.dart
 enum PingType {
   tcp,
   proxy
 }
 
+/// Результат пинга — используется в ping_manager.dart и server_list_item.dart
 class PingResult {
   final String server;
   final int? latencyMs;
@@ -20,6 +22,7 @@ class PingResult {
   });
 }
 
+/// Сервис пинга — используется в ping_manager.dart
 class PingService {
   static Map<String, dynamic>? _parseVlessConfig(String config) {
     try {
@@ -93,6 +96,7 @@ class PingService {
     }
   }
 
+  // FIX: Один запрос вместо двух — latency не завышается
   static Future<PingResult> pingProxy(String config, int proxyPort, {int timeoutSeconds = 10}) async {
     final parsed = _parseVlessConfig(config);
     if (parsed == null) {
@@ -114,36 +118,17 @@ class PingService {
 
       final stopwatch = Stopwatch()..start();
 
-      final req1 = await client.headUrl(Uri.parse('https://www.google.com'));
-      req1.headers.set('User-Agent',
+      final req = await client.getUrl(Uri.parse('http://www.gstatic.com/generate_204'));
+      req.headers.set('User-Agent',
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-      req1.headers.set('Accept', '*/*');
-      req1.headers.set('Connection', 'close');
+      req.headers.set('Connection', 'close');
 
-      final res1 = await req1.close();
-      await res1.drain();
-
-      if (res1.statusCode >= 400) {
-        stopwatch.stop();
-        return PingResult(
-          server: name,
-          latencyMs: stopwatch.elapsedMilliseconds,
-          success: false,
-          error: 'HTTP ${res1.statusCode}',
-        );
-      }
-
-      final req2 = await client.getUrl(Uri.parse('http://www.gstatic.com/generate_204'));
-      req2.headers.set('User-Agent',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-      req2.headers.set('Connection', 'close');
-
-      final res2 = await req2.close();
-      await res2.drain();
+      final res = await req.close();
+      await res.drain();
 
       stopwatch.stop();
 
-      if (res2.statusCode == 204 || res2.statusCode == 200) {
+      if (res.statusCode == 204 || res.statusCode == 200) {
         return PingResult(
           server: name,
           latencyMs: stopwatch.elapsedMilliseconds,
@@ -154,7 +139,7 @@ class PingService {
           server: name,
           latencyMs: stopwatch.elapsedMilliseconds,
           success: false,
-          error: 'HTTP ${res2.statusCode}',
+          error: 'HTTP ${res.statusCode}',
         );
       }
     } on SocketException catch (e) {
@@ -201,21 +186,27 @@ class PingService {
     }
   }
 
+  // FIX: Параллельный пинг с батчами вместо последовательного
   static Future<List<PingResult>> pingMultiple(
       List<String> configs,
       PingType type,
-      {int proxyPort = 2080, int timeoutSeconds = 5}
+      {int proxyPort = 2080,
+        int timeoutSeconds = 5,
+        int maxConcurrent = 5}
       ) async {
     final results = <PingResult>[];
 
-    for (final config in configs) {
-      final result = await ping(
+    for (int i = 0; i < configs.length; i += maxConcurrent) {
+      final batch = configs.skip(i).take(maxConcurrent).toList();
+      final batchResults = await Future.wait(
+        batch.map((config) => ping(
           config,
           type,
           proxyPort: proxyPort,
-          timeoutSeconds: timeoutSeconds
+          timeoutSeconds: timeoutSeconds,
+        )),
       );
-      results.add(result);
+      results.addAll(batchResults);
     }
 
     return results;
