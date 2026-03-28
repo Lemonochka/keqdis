@@ -15,6 +15,15 @@ class ConfigGeneratorV2 {
     return const JsonEncoder.withIndent('  ').convert(configMap);
   }
 
+  static bool _isValidIPv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    return parts.every((part) {
+      final n = int.tryParse(part);
+      return n != null && n >= 0 && n <= 255;
+    });
+  }
+
   static Map<String, dynamic> _generateConfigMap(
       String input,
       AppSettings settings,
@@ -22,14 +31,37 @@ class ConfigGeneratorV2 {
       String adapterIp,
       ) {
     final trimmed = input.trim();
-    final uri = Uri.parse(trimmed);
+
+    final Uri uri;
+    try {
+      uri = Uri.parse(trimmed);
+    } catch (e) {
+      throw ArgumentError('Невалидный URI: $e');
+    }
+
     final uuid = uri.userInfo;
     final address = uri.host;
     final port = uri.port;
 
+    if (uuid.isEmpty) {
+      throw ArgumentError('UUID (userInfo) отсутствует в URI. Проверьте формат ссылки.');
+    }
+
     String getParam(String key, [String def = '']) {
       final val = uri.queryParametersAll[key];
       return (val != null && val.isNotEmpty) ? val.first : def;
+    }
+
+    final flow = getParam('flow');
+    final networkType = getParam('type', 'raw');
+    final security = getParam('security', 'none');
+    final encryption = getParam('encryption', 'none');
+
+    if (flow == 'xtls-rprx-vision' && !['tcp', 'raw'].contains(networkType)) {
+      throw ArgumentError(
+          'Flow "xtls-rprx-vision" совместим только с транспортом tcp (raw), '
+              'но указан "$networkType"'
+      );
     }
 
     final outbound = <String, dynamic>{
@@ -39,23 +71,21 @@ class ConfigGeneratorV2 {
         "address": address,
         "port": port,
         "id": uuid,
-        "flow": getParam('flow'),
-        "encryption": getParam('encryption', 'none')
+        "flow": flow,
+        "encryption": encryption
       },
       "streamSettings": <String, dynamic>{
-        "network": getParam('type', 'raw'),
-        "security": getParam('security', 'none'),
+        "network": networkType,
+        "security": security,
       }
     };
 
     if (mode == VpnMode.tun && adapterIp.isNotEmpty) {
       outbound['sendThrough'] = adapterIp;
-      (outbound['streamSettings'] as Map)['sockopt'] = {"tcpFastOpen": true};
+      (outbound['streamSettings'] as Map<String, dynamic>)['sockopt'] = {"tcpFastOpen": true};
     }
 
     final stream = outbound['streamSettings'] as Map<String, dynamic>;
-    final type = stream['network'];
-    final security = stream['security'];
     final sni = getParam('sni', getParam('host', address));
 
     if (security == 'tls') {
@@ -64,40 +94,47 @@ class ConfigGeneratorV2 {
         "fingerprint": getParam('fp', '')
       };
     } else if (security == 'reality') {
+      final publicKey = getParam('pbk');
+      final shortId = getParam('sid');
+
+      if (publicKey.isEmpty) {
+        throw ArgumentError('REALITY требует параметр publicKey (pbk) в URI');
+      }
+
       stream['realitySettings'] = {
         "fingerprint": getParam('fp', 'chrome'),
         "serverName": sni,
-        "password": getParam('pbk'),
-        "shortId": getParam('sid'),
+        "password": publicKey,
+        "shortId": shortId,
         "spiderX": getParam('spx')
       };
     }
 
-    if (type == 'tcp' && getParam('headerType') == 'http') {
+    if (networkType == 'tcp' && getParam('headerType') == 'http') {
       stream['tcpSettings'] = {
         "header": {
           "type": "http",
           "request": {"headers": {"Host": [getParam('host', address)]}}
         }
       };
-    } else if (type == 'ws') {
+    } else if (networkType == 'ws') {
       stream['wsSettings'] = {
         "path": getParam('path', '/'),
         "headers": {"Host": getParam('host', sni)}
       };
-    } else if (type == 'grpc') {
+    } else if (networkType == 'grpc') {
       stream['grpcSettings'] = {
         "serviceName": getParam('serviceName'),
         "multiMode": getParam('mode') == 'multi'
       };
-    } else if (type == 'xhttp' || type == 'splithttp') {
+    } else if (networkType == 'xhttp' || networkType == 'splithttp') {
       final xhttpSettings = <String, dynamic>{"path": getParam('path', '/')};
       final host = getParam('host');
       xhttpSettings['host'] = host.isNotEmpty ? host : sni;
       final xhttpMode = getParam('mode');
       if (xhttpMode.isNotEmpty) xhttpSettings['mode'] = xhttpMode;
       stream['xhttpSettings'] = xhttpSettings;
-    } else if (type == 'httpupgrade') {
+    } else if (networkType == 'httpupgrade') {
       stream['httpupgradeSettings'] = {
         "path": getParam('path', '/'),
         "host": getParam('host', sni),
@@ -117,7 +154,7 @@ class ConfigGeneratorV2 {
           return cleaned;
         }
         if (!cleaned.contains('.')) {
-          return 'regexp:.*\\.${cleaned}\$';
+          return 'regexp:.*\\.$cleaned\$';
         }
         if (cleaned.startsWith('.')) {
           return 'domain:${cleaned.substring(1)}';
@@ -151,8 +188,7 @@ class ConfigGeneratorV2 {
     }
 
     if (mode == VpnMode.systemProxy) {
-      final isIpAddress = RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(address);
-      if (isIpAddress) {
+      if (_isValidIPv4(address)) {
         rules.add({"ip": [address], "outboundTag": "direct"});
       } else {
         rules.add({"domain": ["full:$address"], "outboundTag": "direct"});
@@ -174,14 +210,16 @@ class ConfigGeneratorV2 {
 
     rules.add({"outboundTag": "proxy", "network": "tcp,udp"});
 
+    final outbounds = <Map<String, dynamic>>[
+      outbound,
+      {"protocol": "freedom", "tag": "direct"},
+      {"protocol": "blackhole", "tag": "block"}
+    ];
+
     final config = <String, dynamic>{
       "log": {"loglevel": "warning"},
       "inbounds": <Map<String, dynamic>>[],
-      "outbounds": <Map<String, dynamic>>[
-        outbound,
-        <String, dynamic>{"protocol": "freedom", "tag": "direct"},
-        <String, dynamic>{"protocol": "blackhole", "tag": "block"}
-      ],
+      "outbounds": outbounds,
       "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": rules
@@ -194,7 +232,17 @@ class ConfigGeneratorV2 {
         "queryStrategy": "UseIPv4"
       };
       config["fakedns"] = [{"ipPool": "198.18.0.0/15", "poolSize": 65535}];
-      config["outbounds"].add(<String, dynamic>{"protocol": "dns", "tag": "dns-out"});
+      outbounds.add({"protocol": "dns", "tag": "dns-out"});
+    }
+
+    if (mode == VpnMode.tun) {
+      config["dns"] = {
+        "servers": [
+          "8.8.8.8",
+          "1.1.1.1",
+        ],
+        "queryStrategy": "UseIPv4"
+      };
     }
 
     if (mode == VpnMode.tun) {
@@ -206,7 +254,8 @@ class ConfigGeneratorV2 {
         "settings": {"udp": true, "ip": "127.0.0.1"},
         "sniffing": {
           "enabled": true,
-          "destOverride": ["http", "tls", "quic", "fakedns"]
+          "destOverride": ["http", "tls", "quic", "fakedns"],
+          "routeOnly": true
         }
       });
     } else {
@@ -214,11 +263,12 @@ class ConfigGeneratorV2 {
         "tag": "mixed-in",
         "port": settings.localPort,
         "listen": "127.0.0.1",
-        "protocol": "mixed",
-        "settings": {"udpEnabled": true},
+        "protocol": "socks",
+        "settings": {"udp": true},
         "sniffing": {
           "enabled": true,
-          "destOverride": ["http", "tls", "quic", "fakedns"]
+          "destOverride": ["http", "tls", "quic", "fakedns"],
+          "routeOnly": true
         }
       });
     }
@@ -226,6 +276,7 @@ class ConfigGeneratorV2 {
     return config;
   }
 }
+
 
 class SingBoxChainGen {
   static String generateTunConfig({
@@ -248,9 +299,10 @@ class SingBoxChainGen {
           }
         }
         if (cleaned.startsWith('.')) cleaned = cleaned.substring(1);
+        cleaned = cleaned.trim();
         if (cleaned.isEmpty) return '';
-        return '.$cleaned';
-      }).where((d) => d.isNotEmpty && d != '.').toList();
+        return cleaned;
+      }).where((d) => d.isNotEmpty).toList();
     }
 
     final directDomains = normalizeDomains(parseList(settings.directDomains));
@@ -279,7 +331,6 @@ class SingBoxChainGen {
             "process_name": vpnProcessNames,
           });
         case AppRoutingMode.allProxy:
-
           break;
       }
     }
@@ -296,7 +347,8 @@ class SingBoxChainGen {
       });
     }
 
-    if (directDomains.isNotEmpty && routingMode != AppRoutingMode.allProxy) {
+
+    if (directDomains.isNotEmpty) {
       rules.add({
         "action": "route",
         "outbound": "direct",
@@ -304,7 +356,7 @@ class SingBoxChainGen {
       });
     }
 
-    if (directIps.isNotEmpty && routingMode != AppRoutingMode.allProxy) {
+    if (directIps.isNotEmpty) {
       rules.add({
         "action": "route",
         "outbound": "direct",
@@ -322,10 +374,6 @@ class SingBoxChainGen {
       });
     }
 
-    final dnsFinal = (routingMode == AppRoutingMode.onlySelected)
-        ? "local-dns"
-        : "remote-dns";
-
     final dnsRules = <Map<String, dynamic>>[];
 
     if (vpnProcessNames.isNotEmpty && routingMode == AppRoutingMode.onlySelected) {
@@ -336,13 +384,17 @@ class SingBoxChainGen {
       });
     }
 
-    if (directDomains.isNotEmpty && routingMode != AppRoutingMode.allProxy) {
+    if (directDomains.isNotEmpty) {
       dnsRules.add({
         "action": "route",
         "domain_suffix": directDomains,
         "server": "local-dns"
       });
     }
+
+    final dnsFinal = (routingMode == AppRoutingMode.onlySelected)
+        ? "local-dns"
+        : "remote-dns";
 
     final routeFinal = (routingMode == AppRoutingMode.onlySelected)
         ? "direct"
@@ -379,6 +431,7 @@ class SingBoxChainGen {
           "auto_route": true,
           "strict_route": true,
           "stack": "mixed",
+          "endpoint_independent_nat": true,
         }
       ],
       "outbounds": [

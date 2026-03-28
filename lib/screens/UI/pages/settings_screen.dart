@@ -9,6 +9,7 @@ import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
 import 'package:keqdis/screens/UI/controller/vpn_controller.dart';
 import 'improved_routing_settings.dart';
 
+// ─── Главный экран настроек ───────────────────────────────────────────────────
 class SettingsView extends StatefulWidget {
   final VoidCallback? onThemeChanged;
   final VoidCallback? onSettingsChanged;
@@ -27,9 +28,7 @@ class _SettingsViewState extends State<SettingsView> {
   void initState() {
     super.initState();
     _settingsFuture = SettingsStorage.loadSettings().then((s) {
-      if (mounted) {
-        _portCtrl.text = s.localPort.toString();
-      }
+      if (mounted) _portCtrl.text = s.localPort.toString();
       return s;
     });
   }
@@ -41,121 +40,77 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Future<void> _savePort() async {
-    final currentSettings = await SettingsStorage.loadSettings();
-    final settings = AppSettings(
-      localPort: int.tryParse(_portCtrl.text) ?? 2080,
-      directDomains: currentSettings.directDomains,
-      blockedDomains: currentSettings.blockedDomains,
-      directIps: currentSettings.directIps,
-      proxyDomains: currentSettings.proxyDomains,
-      pingType: currentSettings.pingType,
-      autoStart: currentSettings.autoStart,
-      minimizeToTray: currentSettings.minimizeToTray,
-      startMinimized: currentSettings.startMinimized,
-      autoConnectLastServer: currentSettings.autoConnectLastServer,
-    );
-
-    await SettingsStorage.saveSettings(settings);
-
+    final cur = await SettingsStorage.loadSettings();
+    await SettingsStorage.saveSettings(AppSettings(
+      localPort:            int.tryParse(_portCtrl.text) ?? 2080,
+      directDomains:        cur.directDomains,
+      blockedDomains:       cur.blockedDomains,
+      directIps:            cur.directIps,
+      proxyDomains:         cur.proxyDomains,
+      pingType:             cur.pingType,
+      autoStart:            cur.autoStart,
+      minimizeToTray:       cur.minimizeToTray,
+      startMinimized:       cur.startMinimized,
+      autoConnectLastServer: cur.autoConnectLastServer,
+    ));
     widget.onSettingsChanged?.call();
-
     CustomNotification.show(
       context,
-      message: 'Локальный порт сохранен. Переподключитесь для применения.',
-      type: NotificationType.success,
-    );
-  }
-
-  Widget _buildMenuCard(
-      String title,
-      String subtitle,
-      IconData icon,
-      VoidCallback onTap,
-      ) {
-    final themeManager = ThemeManager();
-    return Card(
-      color: themeManager.getThemeData().colorScheme.background.withAlpha(77),
-      child: ListTile(
-        leading: Icon(icon, color: themeManager.getThemeData().colorScheme.primary, size: 32),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        trailing: Icon(Icons.arrow_forward_ios, color: themeManager.getThemeData().colorScheme.secondary),
-        onTap: onTap,
-      ),
+      message: 'Локальный порт сохранён. Переподключитесь для применения.',
+      type:    NotificationType.success,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager();
+    final s            = themeManager.settings;
 
     return FutureBuilder<AppSettings>(
       future: _settingsFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return Center(child: CircularProgressIndicator(color: s.primaryColor));
         }
 
         return ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            Text(
-              "Основные настройки",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: themeManager.getThemeData().colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
+            // ── Основные настройки ─────────────────────────────────────────
+            _SectionTitle(label: 'Основные настройки', settings: s),
+            const SizedBox(height: 12),
 
-            Card(
-              color: themeManager.getThemeData().colorScheme.background.withAlpha(77),
+            _SettingsCard(
+              settings: s,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      "Локальный порт",
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 8),
+                    Text('Локальный порт',
+                        style: TextStyle(fontWeight: FontWeight.w600, color: s.textColor, fontSize: 14)),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
-                          child: TextField(
-                            controller: _portCtrl,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(fontSize: 14),
-                            decoration: InputDecoration(
-                              hintText: "Например: 2080",
-                              hintStyle: TextStyle(color: Colors.white.withAlpha(51)),
-                              filled: true,
-                              fillColor: Colors.white.withAlpha(13),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.all(16),
-                            ),
+                          child: _ThemedTextField(
+                            controller:  _portCtrl,
+                            hint:        'Например: 2080',
+                            settings:    s,
+                            inputType:   TextInputType.number,
                           ),
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(
                           onPressed: _savePort,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: themeManager.getThemeData().colorScheme.primary,
+                            backgroundColor: s.primaryColor,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            elevation:       0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           ),
-                          child: const Text(
-                            "Сохранить",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: const Text('Сохранить', style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
@@ -164,105 +119,119 @@ class _SettingsViewState extends State<SettingsView> {
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
 
-            Text(
-              "Дополнительные настройки",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: themeManager.getThemeData().colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            _buildMenuCard(
-              "Поведение приложения",
-              "Автозапуск, свертывание в трей и другое",
-              Icons.settings_applications,
-                  () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => BehaviorSettingsPage(onSettingsChanged: widget.onSettingsChanged)),
-                );
-              },
-            ),
+            // ── Дополнительные настройки ───────────────────────────────────
+            _SectionTitle(label: 'Дополнительные настройки', settings: s),
             const SizedBox(height: 12),
 
-            _buildMenuCard(
-              "Маршрутизация",
-              "Правила для доменов, IP-адресов и блокировки",
-              Icons.route,
-                  () {
+            _MenuCard(
+              title:    'Поведение приложения',
+              subtitle: 'Автозапуск, свертывание в трей и другое',
+              icon:     Icons.settings_applications_rounded,
+              settings: s,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => BehaviorSettingsPage(onSettingsChanged: widget.onSettingsChanged),
+              )),
+            ),
+            const SizedBox(height: 10),
+
+            _MenuCard(
+              title:    'Маршрутизация',
+              subtitle: 'Правила для доменов, IP-адресов и блокировки',
+              icon:     Icons.route_rounded,
+              settings: s,
+              onTap: () {
                 final vpn = context.read<VpnController>();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ImprovedRoutingSettingsPage(
-                    onSettingsChanged: widget.onSettingsChanged,
-                    isVpnConnected: vpn.isConnected,
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ImprovedRoutingSettingsPage(
+                    onSettingsChanged:  widget.onSettingsChanged,
+                    isVpnConnected:     vpn.isConnected,
                     onReconnectRequest: () async {
                       await vpn.disconnect();
                       await vpn.connect();
                     },
-                  )),
-                );
+                  ),
+                ));
               },
             ),
+            const SizedBox(height: 10),
+
+            _MenuCard(
+              title:    'Настройки пинга',
+              subtitle: 'Выбор типа пинга (TCP или через прокси)',
+              icon:     Icons.speed_rounded,
+              settings: s,
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => PingSettingsPage(onSettingsChanged: widget.onSettingsChanged),
+              )),
+            ),
+
+            const SizedBox(height: 28),
+
+            // ── Внешний вид ────────────────────────────────────────────────
+            _SectionTitle(label: 'Внешний вид', settings: s),
             const SizedBox(height: 12),
-
-            _buildMenuCard(
-              "Настройки пинга",
-              "Выбор типа пинга (TCP или через прокси)",
-              Icons.speed,
-                  () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => PingSettingsPage(onSettingsChanged: widget.onSettingsChanged)),
-                );
-              },
-            ),
-
-            const SizedBox(height: 32),
-
-            Text(
-              "Внешний вид",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: themeManager.getThemeData().colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
 
             AnimatedBuilder(
               animation: themeManager,
-              builder: (context, child) {
-                return Card(
-                  color: themeManager.getThemeData().colorScheme.background.withAlpha(128),
+              builder: (context, _) {
+                return _SettingsCard(
+                  settings: s,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Переключатель тёмной темы
+                        Row(
+                          children: [
+                            Icon(
+                              s.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                              color: s.primaryColor,
+                              size:  22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Тёмная тема',
+                                      style: TextStyle(fontWeight: FontWeight.w600, color: s.textColor, fontSize: 14)),
+                                  Text('Переключить между светлой и тёмной темой',
+                                      style: TextStyle(fontSize: 11, color: s.secondaryTextColor)),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value:       s.isDarkMode,
+                              onChanged:   (v) async {
+                                await themeManager.setDarkMode(v);
+                                widget.onThemeChanged?.call();
+                              },
+                              activeColor: s.primaryColor,
+                            ),
+                          ],
+                        ),
+
                         if (themeManager.hasCustomBackground) ...[
+                          Divider(height: 24, color: s.borderColor),
+                          // Превью фона
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Stack(
                               children: [
                                 Image.file(
                                   File(themeManager.settings.backgroundImagePath!),
-                                  height: 200,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
+                                  height: 180,
+                                  width:  double.infinity,
+                                  fit:    BoxFit.cover,
                                 ),
                                 Positioned(
-                                  top: 8,
-                                  right: 8,
+                                  top: 8, right: 8,
                                   child: IconButton(
-                                    icon: const Icon(Icons.close, color: Colors.white),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.black54,
-                                    ),
+                                    icon:  const Icon(Icons.close, color: Colors.white),
+                                    style: IconButton.styleFrom(backgroundColor: Colors.black54),
                                     onPressed: () async {
                                       await themeManager.removeBackground();
                                       widget.onThemeChanged?.call();
@@ -272,46 +241,37 @@ class _SettingsViewState extends State<SettingsView> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
-
-                          Text("Прозрачность фона", style: TextStyle(color: Colors.white.withAlpha(179))),
+                          const SizedBox(height: 14),
+                          Text('Прозрачность фона',
+                              style: TextStyle(color: s.secondaryTextColor, fontSize: 13)),
                           Slider(
-                            value: themeManager.settings.backgroundOpacity,
-                            min: 0.1,
-                            max: 1.0,
-                            divisions: 20,
-                            label: '${(themeManager.settings.backgroundOpacity * 100).round()}%',
-                            activeColor: themeManager.getThemeData().colorScheme.primary,
-                            onChanged: (value) {
-                              themeManager.updateOpacity(value);
-                            },
-                            onChangeEnd: (value) {
-                              themeManager.saveTheme();
-                            },
+                            value:         themeManager.settings.backgroundOpacity,
+                            min:           0.1,
+                            max:           1.0,
+                            divisions:     20,
+                            label:         '${(themeManager.settings.backgroundOpacity * 100).round()}%',
+                            activeColor:   s.primaryColor,
+                            inactiveColor: s.borderColor,
+                            onChanged:     (v) => themeManager.updateOpacity(v),
+                            onChangeEnd:   (_) => themeManager.saveTheme(),
                           ),
-
-                          const SizedBox(height: 8),
-                          Text("Размытие фона", style: TextStyle(color: Colors.white.withAlpha(179))),
+                          Text('Размытие фона',
+                              style: TextStyle(color: s.secondaryTextColor, fontSize: 13)),
                           Slider(
-                            value: themeManager.settings.blurIntensity,
-                            min: 0,
-                            max: 20.0,
-                            divisions: 40,
-                            label: themeManager.settings.blurIntensity.round().toString(),
-                            activeColor: themeManager.getThemeData().colorScheme.primary,
-                            onChanged: (value) {
-                              themeManager.updateBlur(value);
-                            },
-                            onChangeEnd: (value) {
-                              themeManager.saveTheme();
-                            },
+                            value:         themeManager.settings.blurIntensity,
+                            min:           0,
+                            max:           20,
+                            divisions:     40,
+                            label:         themeManager.settings.blurIntensity.round().toString(),
+                            activeColor:   s.primaryColor,
+                            inactiveColor: s.borderColor,
+                            onChanged:     (v) => themeManager.updateBlur(v),
+                            onChangeEnd:   (_) => themeManager.saveTheme(),
                           ),
-
-                          const SizedBox(height: 8),
-                          const Divider(),
-                          const SizedBox(height: 8),
+                          Divider(height: 16, color: s.borderColor),
                         ],
 
+                        const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -319,23 +279,22 @@ class _SettingsViewState extends State<SettingsView> {
                               await themeManager.pickBackgroundImage();
                               widget.onThemeChanged?.call();
                             },
-                            icon: const Icon(Icons.image),
+                            icon:  const Icon(Icons.image_rounded),
                             label: Text(themeManager.hasCustomBackground
-                                ? "Изменить фон"
-                                : "Выбрать фоновое изображение"
-                            ),
+                                ? 'Изменить фон'
+                                : 'Выбрать фоновое изображение'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: themeManager.getThemeData().colorScheme.primary,
-                              side: BorderSide(color: themeManager.getThemeData().colorScheme.primary),
-                              padding: const EdgeInsets.all(16),
+                              foregroundColor: s.primaryColor,
+                              side: BorderSide(color: s.primaryColor.withOpacity(0.5)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                           ),
                         ),
-
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         Text(
-                          "Цвета интерфейса автоматически адаптируются под выбранное изображение",
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          'Цвета интерфейса автоматически адаптируются под выбранное изображение',
+                          style: TextStyle(fontSize: 11, color: s.secondaryTextColor.withOpacity(0.6)),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -344,7 +303,6 @@ class _SettingsViewState extends State<SettingsView> {
                 );
               },
             ),
-
             const SizedBox(height: 24),
           ],
         );
@@ -352,6 +310,8 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 }
+
+// ─── BehaviorSettingsPage ─────────────────────────────────────────────────────
 class BehaviorSettingsPage extends StatefulWidget {
   final VoidCallback? onSettingsChanged;
   const BehaviorSettingsPage({super.key, this.onSettingsChanged});
@@ -361,11 +321,11 @@ class BehaviorSettingsPage extends StatefulWidget {
 }
 
 class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
-  bool _autoStart = false;
-  bool _minimizeToTray = true;
-  bool _startMinimized = false;
+  bool _autoStart            = false;
+  bool _minimizeToTray       = true;
+  bool _startMinimized       = false;
   bool _autoConnectLastServer = false;
-  bool _isLoading = true;
+  bool _isLoading            = true;
 
   @override
   void initState() {
@@ -374,403 +334,86 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await SettingsStorage.loadSettings();
+    final s = await SettingsStorage.loadSettings();
     if (mounted) {
       setState(() {
-        _autoStart = settings.autoStart;
-        _minimizeToTray = settings.minimizeToTray;
-        _startMinimized = settings.startMinimized;
-        _autoConnectLastServer = settings.autoConnectLastServer;
-        _isLoading = false;
+        _autoStart             = s.autoStart;
+        _minimizeToTray        = s.minimizeToTray;
+        _startMinimized        = s.startMinimized;
+        _autoConnectLastServer  = s.autoConnectLastServer;
+        _isLoading             = false;
       });
     }
   }
 
-  Future<void> _saveBehaviorSettings() async {
-    final currentSettings = await SettingsStorage.loadSettings();
-    final settings = AppSettings(
-      localPort: currentSettings.localPort,
-      directDomains: currentSettings.directDomains,
-      blockedDomains: currentSettings.blockedDomains,
-      directIps: currentSettings.directIps,
-      proxyDomains: currentSettings.proxyDomains,
-      pingType: currentSettings.pingType,
-      autoStart: _autoStart,
-      minimizeToTray: _minimizeToTray,
-      startMinimized: _startMinimized,
+  Future<void> _save() async {
+    final cur = await SettingsStorage.loadSettings();
+    await SettingsStorage.saveSettings(AppSettings(
+      localPort:             cur.localPort,
+      directDomains:         cur.directDomains,
+      blockedDomains:        cur.blockedDomains,
+      directIps:             cur.directIps,
+      proxyDomains:          cur.proxyDomains,
+      pingType:              cur.pingType,
+      autoStart:             _autoStart,
+      minimizeToTray:        _minimizeToTray,
+      startMinimized:        _startMinimized,
       autoConnectLastServer: _autoConnectLastServer,
-    );
-
-    await SettingsStorage.saveSettings(settings);
+    ));
     await AutoStartService.toggle(_autoStart);
-
-    if (mounted) {
-      widget.onSettingsChanged?.call();
-    }
-  }
-
-  Widget _buildSwitch(String title, String subtitle, bool value, Function(bool) onChanged) {
-    return Card(
-      color: ThemeManager().getThemeData().colorScheme.background.withAlpha(77),
-      child: SwitchListTile(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
-        value: value,
-        activeColor: ThemeManager().getThemeData().colorScheme.primary,
-        onChanged: onChanged,
-      ),
-    );
+    widget.onSettingsChanged?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = ThemeManager();
+    final s = ThemeManager().settings;
 
-    return Scaffold(
-      body: Stack(
+    return _SubPage(
+      title:   'Поведение приложения',
+      settings: s,
+      child: _isLoading
+          ? Center(child: CircularProgressIndicator(color: s.primaryColor))
+          : ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          // Кастомный фон
-          if (themeManager.hasCustomBackground)
-            Positioned.fill(
-              child: _buildOptimizedBackground(context, themeManager),
-            ),
-
-          Column(
-            children: [
-              AppBar(
-                backgroundColor: themeManager.getThemeData().colorScheme.background.withAlpha(230),
-                title: const Text('Поведение приложения'),
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    _buildSwitch(
-                      "Автозапуск при старте",
-                      "Приложение будет запускаться вместе с системой",
-                      _autoStart,
-                          (value) {
-                        setState(() => _autoStart = value);
-                        _saveBehaviorSettings();
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSwitch(
-                      "Сворачивать в трей",
-                      "Приложение будет сворачиваться в трей",
-                      _minimizeToTray,
-                          (value) {
-                        setState(() => _minimizeToTray = value);
-                        _saveBehaviorSettings();
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSwitch(
-                      "Запускать свёрнутым",
-                      "Приложение будет сразу сворачиваться в трей при автозапуске",
-                      _startMinimized,
-                          (value) {
-                        setState(() => _startMinimized = value);
-                        _saveBehaviorSettings();
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSwitch(
-                      "Автоподключение к последнему серверу",
-                      "Автоматически подключаться к последнему использованному серверу при запуске",
-                      _autoConnectLastServer,
-                          (value) {
-                        setState(() => _autoConnectLastServer = value);
-                        _saveBehaviorSettings();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          _SwitchCard(
+            title:    'Автозапуск при старте',
+            subtitle: 'Запускать вместе с системой',
+            value:    _autoStart,
+            settings: s,
+            onChanged: (v) { setState(() => _autoStart = v); _save(); },
+          ),
+          const SizedBox(height: 10),
+          _SwitchCard(
+            title:    'Сворачивать в трей',
+            subtitle: 'При закрытии окна сворачивать в системный трей',
+            value:    _minimizeToTray,
+            settings: s,
+            onChanged: (v) { setState(() => _minimizeToTray = v); _save(); },
+          ),
+          const SizedBox(height: 10),
+          _SwitchCard(
+            title:    'Запускать свёрнутым',
+            subtitle: 'Сразу сворачиваться в трей при автозапуске',
+            value:    _startMinimized,
+            settings: s,
+            onChanged: (v) { setState(() => _startMinimized = v); _save(); },
+          ),
+          const SizedBox(height: 10),
+          _SwitchCard(
+            title:    'Автоподключение',
+            subtitle: 'Подключаться к последнему серверу при старте',
+            value:    _autoConnectLastServer,
+            settings: s,
+            onChanged: (v) { setState(() => _autoConnectLastServer = v); _save(); },
           ),
         ],
       ),
     );
   }
-
-  Widget _buildOptimizedBackground(BuildContext context, ThemeManager themeManager) {
-    final path = themeManager.settings.backgroundImagePath!;
-    final imageProvider = FileImage(File(path));
-
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
-    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
-
-    final resizedImageProvider = ResizeImage(
-      imageProvider,
-      width: screenWidth,
-      height: screenHeight,
-    );
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Image(
-          image: resizedImageProvider,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint('Ошибка загрузки фонового изображения: $error');
-            Future.microtask(() => themeManager.removeBackground());
-            return Container(color: const Color(0xFF0A0E27));
-          },
-        ),
-        BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: themeManager.settings.blurIntensity,
-            sigmaY: themeManager.settings.blurIntensity,
-          ),
-          child: Container(
-            color: Colors.black.withAlpha(
-              ((1.0 - themeManager.settings.backgroundOpacity) * 255).round(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-class RoutingSettingsPage extends StatefulWidget {
-  final VoidCallback? onSettingsChanged;
-  const RoutingSettingsPage({super.key, this.onSettingsChanged});
-
-  @override
-  State<RoutingSettingsPage> createState() => _RoutingSettingsPageState();
-}
-
-class _RoutingSettingsPageState extends State<RoutingSettingsPage> {
-  final _directDomainsCtrl = TextEditingController();
-  final _blockDomainsCtrl = TextEditingController();
-  final _directIpsCtrl = TextEditingController();
-  final _proxyDomainsCtrl = TextEditingController();
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  @override
-  void dispose() {
-    _directDomainsCtrl.dispose();
-    _blockDomainsCtrl.dispose();
-    _directIpsCtrl.dispose();
-    _proxyDomainsCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadSettings() async {
-    final settings = await SettingsStorage.loadSettings();
-    if (mounted) {
-      setState(() {
-        _directDomainsCtrl.text = settings.directDomains;
-        _blockDomainsCtrl.text = settings.blockedDomains;
-        _directIpsCtrl.text = settings.directIps;
-        _proxyDomainsCtrl.text = settings.proxyDomains;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _saveRoutingSettings() async {
-    final currentSettings = await SettingsStorage.loadSettings();
-    final settings = AppSettings(
-      localPort: currentSettings.localPort,
-      directDomains: _directDomainsCtrl.text,
-      blockedDomains: _blockDomainsCtrl.text,
-      directIps: _directIpsCtrl.text,
-      proxyDomains: _proxyDomainsCtrl.text,
-      pingType: currentSettings.pingType,
-      autoStart: currentSettings.autoStart,
-      minimizeToTray: currentSettings.minimizeToTray,
-      startMinimized: currentSettings.startMinimized,
-      autoConnectLastServer: currentSettings.autoConnectLastServer,
-    );
-
-    await SettingsStorage.saveSettings(settings);
-
-    if (mounted) {
-      widget.onSettingsChanged?.call();
-
-      CustomNotification.show(
-        context,
-        message: 'Настройки маршрутизации сохранены. Переподключитесь для применения.',
-        type: NotificationType.success,
-      );
-    }
-  }
-
-  Widget _buildField(String label, String hint, TextEditingController ctrl, {int maxLines = 1}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-        const SizedBox(height: 8),
-        TextField(
-          controller: ctrl,
-          maxLines: maxLines,
-          keyboardType: TextInputType.multiline,
-          style: const TextStyle(fontSize: 14),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.white.withAlpha(51)),
-            filled: true,
-            fillColor: Colors.white.withAlpha(13),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.all(16),
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final themeManager = ThemeManager();
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          if (themeManager.hasCustomBackground)
-            Positioned.fill(
-              child: _buildOptimizedBackground(context, themeManager),
-            ),
-
-          Column(
-            children: [
-              AppBar(
-                backgroundColor: themeManager.getThemeData().colorScheme.background.withAlpha(230),
-                title: const Text('Настройки маршрутизации'),
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    const Text(
-                      "Можно вводить через запятую, пробел или с новой строки.",
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildField(
-                      "Сайты напрямую (Direct)",
-                      "yandex.ru, vk.com, ru...",
-                      _directDomainsCtrl,
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildField(
-                      "Принудительно через VPN",
-                      "google.com, youtube.com...",
-                      _proxyDomainsCtrl,
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildField(
-                      "Блокировка сайтов (Block)",
-                      "ads.google.com, tracker.com...",
-                      _blockDomainsCtrl,
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildField(
-                      "IP напрямую (CIDR)",
-                      "192.168.0.0/16, 10.0.0.0/8...",
-                      _directIpsCtrl,
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      height: 56,
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _saveRoutingSettings,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: themeManager.getThemeData().colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.save, size: 24),
-                            SizedBox(width: 12),
-                            Text("Сохранить настройки"),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOptimizedBackground(BuildContext context, ThemeManager themeManager) {
-    final path = themeManager.settings.backgroundImagePath!;
-    final imageProvider = FileImage(File(path));
-
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
-    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
-
-    final resizedImageProvider = ResizeImage(
-      imageProvider,
-      width: screenWidth,
-      height: screenHeight,
-    );
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Image(
-          image: resizedImageProvider,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint('Ошибка загрузки фонового изображения: $error');
-            Future.microtask(() => themeManager.removeBackground());
-            return Container(color: const Color(0xFF0A0E27));
-          },
-        ),
-        BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: themeManager.settings.blurIntensity,
-            sigmaY: themeManager.settings.blurIntensity,
-          ),
-          child: Container(
-            color: Colors.black.withAlpha(
-              ((1.0 - themeManager.settings.backgroundOpacity) * 255).round(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
+// ─── PingSettingsPage ─────────────────────────────────────────────────────────
 class PingSettingsPage extends StatefulWidget {
   final VoidCallback? onSettingsChanged;
   const PingSettingsPage({super.key, this.onSettingsChanged});
@@ -781,201 +424,277 @@ class PingSettingsPage extends StatefulWidget {
 
 class _PingSettingsPageState extends State<PingSettingsPage> {
   String _pingType = 'tcp';
-  bool _isLoading = true;
+  bool   _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _load();
   }
 
-  Future<void> _loadSettings() async {
-    final settings = await SettingsStorage.loadSettings();
-    if (mounted) {
-      setState(() {
-        _pingType = settings.pingType;
-        _isLoading = false;
-      });
-    }
+  Future<void> _load() async {
+    final s = await SettingsStorage.loadSettings();
+    if (mounted) setState(() { _pingType = s.pingType; _isLoading = false; });
   }
 
-  Future<void> _savePingSettings(String newType) async {
-    final currentSettings = await SettingsStorage.loadSettings();
-    final settings = AppSettings(
-      localPort: currentSettings.localPort,
-      directDomains: currentSettings.directDomains,
-      blockedDomains: currentSettings.blockedDomains,
-      directIps: currentSettings.directIps,
-      proxyDomains: currentSettings.proxyDomains,
-      pingType: newType,
-      autoStart: currentSettings.autoStart,
-      minimizeToTray: currentSettings.minimizeToTray,
-      startMinimized: currentSettings.startMinimized,
-      autoConnectLastServer: currentSettings.autoConnectLastServer,
-    );
-
-    await SettingsStorage.saveSettings(settings);
-
-    if (mounted) {
-      widget.onSettingsChanged?.call();
-    }
+  Future<void> _save(String t) async {
+    final cur = await SettingsStorage.loadSettings();
+    await SettingsStorage.saveSettings(AppSettings(
+      localPort:             cur.localPort,
+      directDomains:         cur.directDomains,
+      blockedDomains:        cur.blockedDomains,
+      directIps:             cur.directIps,
+      proxyDomains:          cur.proxyDomains,
+      pingType:              t,
+      autoStart:             cur.autoStart,
+      minimizeToTray:        cur.minimizeToTray,
+      startMinimized:        cur.startMinimized,
+      autoConnectLastServer: cur.autoConnectLastServer,
+    ));
+    widget.onSettingsChanged?.call();
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = ThemeManager();
+    final s = ThemeManager().settings;
 
-    return Scaffold(
-      body: Stack(
+    return _SubPage(
+      title:    'Настройки пинга',
+      settings: s,
+      child: _isLoading
+          ? Center(child: CircularProgressIndicator(color: s.primaryColor))
+          : ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          // Кастомный фон
-          if (themeManager.hasCustomBackground)
-            Positioned.fill(
-              child: _buildOptimizedBackground(context, themeManager),
-            ),
-
-          // Контент
-          Column(
-            children: [
-              AppBar(
-                backgroundColor: themeManager.getThemeData().colorScheme.background.withAlpha(230),
-                title: const Text('Настройки пинга'),
-              ),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    Text(
-                      "Тип пинга",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: themeManager.getThemeData().colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      color: themeManager.getThemeData().colorScheme.background.withAlpha(77),
-                      child: Column(
-                        children: [
-                          RadioListTile<String>(
-                            title: const Text('TCP пинг'),
-                            subtitle: const Text(
-                              'Прямое подключение к серверу',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                            ),
-                            value: 'tcp',
-                            groupValue: _pingType,
-                            activeColor: themeManager.getThemeData().colorScheme.primary,
-                            onChanged: (value) {
-                              setState(() => _pingType = value!);
-                              _savePingSettings(value!);
-                            },
-                          ),
-                          const Divider(height: 1),
-                          RadioListTile<String>(
-                            title: const Text('Пинг Прокси'),
-                            subtitle: const Text(
-                              'Проверка через локальный прокси',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                            ),
-                            value: 'proxy',
-                            groupValue: _pingType,
-                            activeColor: themeManager.getThemeData().colorScheme.primary,
-                            onChanged: (value) {
-                              setState(() => _pingType = value!);
-                              _savePingSettings(value!);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withAlpha(26),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withAlpha(77)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.info_outline, color: Colors.blue,
-                                  size: 20),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Подсказка',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            '• TCP пинг - для проверки удалённости от серверов\n'
-                                '• Пинг через прокси - используйте для проверки доступности сервера',
-                            style: TextStyle(fontSize: 13, height: 1.5),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          _SettingsCard(
+            settings: s,
+            child: Column(
+              children: [
+                RadioListTile<String>(
+                  title:    Text('TCP пинг', style: TextStyle(color: s.textColor, fontWeight: FontWeight.w500)),
+                  subtitle: Text('Прямое подключение к серверу',
+                      style: TextStyle(color: s.secondaryTextColor, fontSize: 12)),
+                  value:       'tcp',
+                  groupValue:  _pingType,
+                  activeColor: s.primaryColor,
+                  onChanged: (v) { setState(() => _pingType = v!); _save(v!); },
                 ),
-              ),
-            ],
+                Divider(height: 1, color: s.borderColor),
+                RadioListTile<String>(
+                  title:    Text('Пинг через прокси', style: TextStyle(color: s.textColor, fontWeight: FontWeight.w500)),
+                  subtitle: Text('Проверка через локальный прокси',
+                      style: TextStyle(color: s.secondaryTextColor, fontSize: 12)),
+                  value:       'proxy',
+                  groupValue:  _pingType,
+                  activeColor: s.primaryColor,
+                  onChanged: (v) { setState(() => _pingType = v!); _save(v!); },
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildOptimizedBackground(BuildContext context, ThemeManager themeManager) {
-    final path = themeManager.settings.backgroundImagePath!;
-    final imageProvider = FileImage(File(path));
+// ─── Вспомогательные виджеты ──────────────────────────────────────────────────
+class _SubPage extends StatelessWidget {
+  final String title;
+  final ThemeSettings settings;
+  final Widget child;
 
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
-    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+  const _SubPage({required this.title, required this.settings, required this.child});
 
-    final resizedImageProvider = ResizeImage(
-      imageProvider,
-      width: screenWidth,
-      height: screenHeight,
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    return Scaffold(
+      backgroundColor: s.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: s.sidebarColor,
+        foregroundColor: s.textColor,
+        elevation:       0,
+        title: Text(title, style: TextStyle(color: s.textColor, fontWeight: FontWeight.w600, fontSize: 17)),
+        iconTheme: IconThemeData(color: s.primaryColor),
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: child,
     );
+  }
+}
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Image(
-          image: resizedImageProvider,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint('Ошибка загрузки фонового изображения: $error');
-            Future.microtask(() => themeManager.removeBackground());
-            return Container(color: const Color(0xFF0A0E27));
-          },
-        ),
-        BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: themeManager.settings.blurIntensity,
-            sigmaY: themeManager.settings.blurIntensity,
-          ),
-          child: Container(
-            color: Colors.black.withAlpha(
-              ((1.0 - themeManager.settings.backgroundOpacity) * 255).round(),
+class _SectionTitle extends StatelessWidget {
+  final String label;
+  final ThemeSettings settings;
+  const _SectionTitle({required this.label, required this.settings});
+
+  @override
+  Widget build(BuildContext context) => Text(
+    label,
+    style: TextStyle(
+      fontSize:   18,
+      fontWeight: FontWeight.w700,
+      color:      settings.textColor,
+    ),
+  );
+}
+
+class _SettingsCard extends StatelessWidget {
+  final ThemeSettings settings;
+  final Widget child;
+  const _SettingsCard({required this.settings, required this.child});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color:        settings.cardColor,
+      borderRadius: BorderRadius.circular(16),
+      border:       Border.all(color: settings.borderColor),
+    ),
+    child: child,
+  );
+}
+
+class _MenuCard extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final ThemeSettings settings;
+  final VoidCallback onTap;
+
+  const _MenuCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.settings,
+    required this.onTap,
+  });
+
+  @override
+  State<_MenuCard> createState() => _MenuCardState();
+}
+
+class _MenuCardState extends State<_MenuCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.settings;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit:  (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding:  const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color:        _hovered ? s.primaryColor.withOpacity(0.08) : s.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border:       Border.all(
+              color: _hovered ? s.primaryColor.withOpacity(0.4) : s.borderColor,
             ),
           ),
+          child: Row(
+            children: [
+              Container(
+                padding:    const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color:        s.primaryColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(widget.icon, color: s.primaryColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.title,
+                        style: TextStyle(fontWeight: FontWeight.w600, color: s.textColor, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text(widget.subtitle,
+                        style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded, size: 16, color: s.secondaryTextColor),
+            ],
+          ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _SwitchCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ThemeSettings settings;
+  final Function(bool) onChanged;
+
+  const _SwitchCard({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.settings,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    return Container(
+      decoration: BoxDecoration(
+        color:        s.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border:       Border.all(color: s.borderColor),
+      ),
+      child: SwitchListTile(
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.w500, color: s.textColor, fontSize: 14)),
+        subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
+        value:       value,
+        onChanged:   onChanged,
+        activeColor: s.primaryColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+}
+
+class _ThemedTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final ThemeSettings settings;
+  final TextInputType inputType;
+
+  const _ThemedTextField({
+    required this.controller,
+    required this.hint,
+    required this.settings,
+    this.inputType = TextInputType.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    return TextField(
+      controller:  controller,
+      keyboardType: inputType,
+      style: TextStyle(fontSize: 14, color: s.textColor),
+      decoration: InputDecoration(
+        hintText:  hint,
+        hintStyle: TextStyle(color: s.secondaryTextColor.withOpacity(0.5)),
+        filled:    true,
+        fillColor: s.searchBarColor,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide:   BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.all(14),
+      ),
     );
   }
 }

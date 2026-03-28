@@ -18,113 +18,111 @@ class VpnModeSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = ThemeManager();
+    final s = ThemeManager().settings;
 
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: themeManager.settings.accentColor.withOpacity(0.2),
+        color:        s.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
+        border:       Border.all(color: s.borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildModeButton(
-            context,
-            label: 'Proxy',
-            icon: Icons.wifi_tethering,
+          _ModeButton(
+            label:      'Proxy',
+            icon:       Icons.wifi_tethering,
             isSelected: currentMode == VpnMode.systemProxy,
-            onTap: () => onModeChanged(VpnMode.systemProxy),
+            onTap:      () => onModeChanged(VpnMode.systemProxy),
+            isConnected: isConnected,
+            settings:   s,
           ),
-          const SizedBox(width: 4),
-          _buildModeButton(
-            context,
-            label: 'TUN',
-            icon: Icons.shield,
+          const SizedBox(width: 3),
+          _ModeButton(
+            label:      'TUN',
+            icon:       Icons.shield,
             isSelected: currentMode == VpnMode.tun,
-            onTap: () => onModeChanged(VpnMode.tun),
+            onTap:      () => onModeChanged(VpnMode.tun),
+            isConnected: isConnected,
             needsAdmin: !tunAvailable,
+            settings:   s,
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildModeButton(
-      BuildContext context, {
-        required String label,
-        required IconData icon,
-        required bool isSelected,
-        VoidCallback? onTap,
-        bool needsAdmin = false,
-      }) {
-    final themeManager = ThemeManager();
+class _ModeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback? onTap;
+  final bool isConnected;
+  final bool needsAdmin;
+  final ThemeSettings settings;
 
-    String tooltip;
-    if (needsAdmin) {
-      tooltip = 'TUN режим (требуются права администратора)';
-    } else if (isConnected) {
-      tooltip = 'Отключитесь для смены режима';
-    } else {
-      tooltip = label == 'Proxy' ? 'System Proxy' : label;
-    }
+  const _ModeButton({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+    required this.isConnected,
+    required this.settings,
+    this.needsAdmin = false,
+  });
+
+  String get _tooltip {
+    if (needsAdmin)  return 'TUN режим (требуются права администратора)';
+    if (isConnected) return 'Отключитесь для смены режима';
+    return label == 'Proxy' ? 'System Proxy' : 'TUN режим';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    final active = isSelected;
+    final textColor = needsAdmin
+        ? s.secondaryTextColor.withOpacity(0.4)
+        : active
+        ? (s.isDarkMode ? Colors.white : const Color(0xFF2D2D2D))
+        : s.secondaryTextColor;
 
     return Tooltip(
-      message: tooltip,
-      child: InkWell(
+      message: _tooltip,
+      child: GestureDetector(
         onTap: isConnected ? null : onTap,
-        borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          curve:    Curves.easeOutCubic,
+          padding:  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected
-                ? themeManager.settings.primaryColor
+            color: active
+                ? s.primaryColor.withOpacity(0.85)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: isSelected
-                ? Border.all(
-              color: themeManager.settings.primaryColor.withOpacity(0.5),
-              width: 1,
-            )
-                : null,
+            borderRadius: BorderRadius.circular(9),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
-                size: 18,
-                color: needsAdmin
-                    ? Colors.white54
-                    : isSelected
-                    ? Colors.white
-                    : Colors.white70,
+                size:  16,
+                color: active ? Colors.white : textColor,
               ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: needsAdmin
-                      ? Colors.white54
-                      : isSelected
-                      ? Colors.white
-                      : Colors.white70,
+                  fontSize:   12,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  color:      active ? Colors.white : textColor,
                 ),
               ),
               if (needsAdmin) ...[
                 const SizedBox(width: 4),
-                const Icon(
-                  Icons.lock_outline,
-                  size: 11,
-                  color: Colors.white38,
-                ),
+                Icon(Icons.lock_outline, size: 11, color: s.secondaryTextColor.withOpacity(0.4)),
               ],
             ],
           ),

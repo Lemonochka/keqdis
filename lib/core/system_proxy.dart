@@ -10,6 +10,8 @@ class SystemProxy {
     return true;
   }
 
+  // FIX: Разделили на два метода — строгий и мягкий
+  // Строгий — для set-операций, где ошибка критична
   static Future<void> _runRegCommand(List<String> args) async {
     if (!Platform.isWindows) return;
     try {
@@ -23,28 +25,34 @@ class SystemProxy {
     }
   }
 
+  // FIX: Мягкий вариант — для cleanup-операций, где ошибка не критична
+  // Возвращает bool вместо throw, не печатает stack trace
+  static Future<bool> _tryRunRegCommand(List<String> args) async {
+    if (!Platform.isWindows) return true;
+    try {
+      final result = await Process.run('reg', args, runInShell: true);
+      return result.exitCode == 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Future<void> _setSystemProxy(String address) async {
     await _runRegCommand([
       'add',
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-      '/v',
-      'ProxyServer',
-      '/t',
-      'REG_SZ',
-      '/d',
-      address,
+      '/v', 'ProxyServer',
+      '/t', 'REG_SZ',
+      '/d', address,
       '/f'
     ]);
 
     await _runRegCommand([
       'add',
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-      '/v',
-      'ProxyEnable',
-      '/t',
-      'REG_DWORD',
-      '/d',
-      '1',
+      '/v', 'ProxyEnable',
+      '/t', 'REG_DWORD',
+      '/d', '1',
       '/f'
     ]);
   }
@@ -64,23 +72,34 @@ class SystemProxy {
     await _setSystemProxy(proxyValue);
   }
 
+  // FIX: clearProxy использует _tryRunRegCommand — cleanup не должен ломать flow приложения
   static Future<void> clearProxy() async {
-     if (!Platform.isWindows) return;
-    try {
-       await _runRegCommand([
-        'add',
-        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyEnable',
-        '/t',
-        'REG_DWORD',
-        '/d',
-        '0',
-        '/f'
-      ]);
-    } catch (e, s) {
-       debugPrint('Failed to clear proxy settings: $e\n$s');
-      // Do not rethrow, as clearing is a cleanup operation
+    if (!Platform.isWindows) return;
+
+    // Отключаем прокси (reg add создаёт ключ если его нет — не должен падать)
+    final disableOk = await _tryRunRegCommand([
+      'add',
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+      '/v', 'ProxyEnable',
+      '/t', 'REG_DWORD',
+      '/d', '0',
+      '/f'
+    ]);
+
+    if (!disableOk) {
+      debugPrint('SystemProxy: Failed to disable ProxyEnable (non-critical)');
+    }
+
+    // FIX: Удаляем ProxyServer — используем мягкий метод, т.к. ключ может не существовать
+    final deleteOk = await _tryRunRegCommand([
+      'delete',
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
+      '/v', 'ProxyServer',
+      '/f'
+    ]);
+
+    if (!deleteOk) {
+      debugPrint('SystemProxy: ProxyServer key not found or could not be deleted (non-critical)');
     }
   }
 
@@ -91,8 +110,7 @@ class SystemProxy {
       final result = await Process.run('reg', [
         'query',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyEnable',
+        '/v', 'ProxyEnable',
       ]);
 
       if (result.exitCode != 0) {
@@ -109,8 +127,7 @@ class SystemProxy {
       final addressResult = await Process.run('reg', [
         'query',
         r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings',
-        '/v',
-        'ProxyServer',
+        '/v', 'ProxyServer',
       ]);
 
       if (addressResult.exitCode == 0) {

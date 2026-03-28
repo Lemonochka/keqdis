@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
@@ -75,21 +76,21 @@ class ServerItem {
   }) : addedAt = addedAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'config': config,
-        'type': type.name,
-        'subscriptionId': subscriptionId,
-        'subscriptionName': subscriptionName,
-        'addedAt': addedAt.toIso8601String(),
-        'isFavorite': isFavorite,
-      };
+    'id': id,
+    'config': config,
+    'type': type.name,
+    'subscriptionId': subscriptionId,
+    'subscriptionName': subscriptionName,
+    'addedAt': addedAt.toIso8601String(),
+    'isFavorite': isFavorite,
+  };
 
   factory ServerItem.fromJson(Map<String, dynamic> json) {
     return ServerItem(
       id: json['id'] as String,
       config: json['config'] as String,
       type: ServerItemType.values.firstWhere(
-        (e) => e.name == json['type'],
+            (e) => e.name == json['type'],
         orElse: () => ServerItemType.manual,
       ),
       subscriptionId: json['subscriptionId'] as String?,
@@ -147,13 +148,13 @@ class Subscription {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'url': url,
-        'lastUpdated': lastUpdated.toIso8601String(),
-        'autoUpdate': autoUpdate,
-        'serverCount': serverCount,
-      };
+    'id': id,
+    'name': name,
+    'url': url,
+    'lastUpdated': lastUpdated.toIso8601String(),
+    'autoUpdate': autoUpdate,
+    'serverCount': serverCount,
+  };
 
   factory Subscription.fromJson(Map<String, dynamic> json) {
     return Subscription(
@@ -193,9 +194,25 @@ class UnifiedStorage {
   static List<Subscription> _subscriptions = [];
   static bool _isInitialized = false;
 
+  // FIX: Простая очередь операций для предотвращения race condition при параллельных записях
+  static Completer<void>? _operationLock;
+
+  static Future<T> _withLock<T>(Future<T> Function() action) async {
+    // Ждём завершения предыдущей операции
+    while (_operationLock != null && !_operationLock!.isCompleted) {
+      await _operationLock!.future;
+    }
+    _operationLock = Completer<void>();
+    try {
+      return await action();
+    } finally {
+      _operationLock!.complete();
+    }
+  }
+
   static Future<void> init() async {
     if (_isInitialized) return;
-    await PortableStorage.getPortableDirectory(); // Initialize portable dir path
+    await PortableStorage.getPortableDirectory();
     await _loadAllFromDisk();
     _isInitialized = true;
   }
@@ -237,7 +254,7 @@ class UnifiedStorage {
     await _saveGenericList(_subscriptionsFile, _subscriptions);
   }
 
-  static Future<void> _saveGenericList(String fileName, List<dynamic> list) async {
+  static Future<void> _saveGenericList<T extends dynamic>(String fileName, List<T> list) async {
     try {
       final filePath = PortableStorage.getFilePath(fileName);
       final file = File(filePath);
@@ -258,36 +275,46 @@ class UnifiedStorage {
     return _subscriptions;
   }
 
+  // FIX: Обернули мутирующие операции в _withLock
   static Future<ServerItem> addManualServer(String config) async {
-    await _ensureInitialized();
-    if (_servers.any((s) => s.config == config)) {
-      throw Exception('Этот сервер уже добавлен');
-    }
-    final item = ServerItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      config: config,
-      type: ServerItemType.manual,
-    );
-    _servers.add(item);
-    await _saveServers();
-    return item;
+    return _withLock(() async {
+      await _ensureInitialized();
+      if (_servers.any((s) => s.config == config)) {
+        throw Exception('Этот сервер уже добавлен');
+      }
+      // FIX: Добавляем рандомную часть к ID для уникальности при быстром добавлении
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final random = (timestamp * 31) % 99999; // простой pseudo-random
+      final item = ServerItem(
+        id: '${timestamp}_$random',
+        config: config,
+        type: ServerItemType.manual,
+      );
+      _servers.add(item);
+      await _saveServers();
+      return item;
+    });
   }
 
   static Future<void> deleteServer(String id) async {
-    await _ensureInitialized();
-    _servers.removeWhere((s) => s.id == id);
-    await _saveServers();
+    return _withLock(() async {
+      await _ensureInitialized();
+      _servers.removeWhere((s) => s.id == id);
+      await _saveServers();
+    });
   }
 
   static Future<void> toggleFavorite(String serverId) async {
-    await _ensureInitialized();
-    final index = _servers.indexWhere((s) => s.id == serverId);
-    if (index != -1) {
-      _servers[index] = _servers[index].copyWith(
-        isFavorite: !_servers[index].isFavorite,
-      );
-      await _saveServers();
-    }
+    return _withLock(() async {
+      await _ensureInitialized();
+      final index = _servers.indexWhere((s) => s.id == serverId);
+      if (index != -1) {
+        _servers[index] = _servers[index].copyWith(
+          isFavorite: !_servers[index].isFavorite,
+        );
+        await _saveServers();
+      }
+    });
   }
 
   static Future<void> saveLastServer(String? serverId) async {
@@ -316,57 +343,69 @@ class UnifiedStorage {
       return null;
     }
   }
-  
+
   static Future<Subscription> addSubscription(
       {required String name, required String url, bool autoUpdate = true}) async {
-    await _ensureInitialized();
-    if (_subscriptions.any((sub) => sub.url == url)) {
-      throw Exception('Подписка с таким URL уже существует');
-    }
-    final subscription = Subscription(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      url: url,
-      lastUpdated: DateTime.now().subtract(const Duration(days: 1)),
-      autoUpdate: autoUpdate,
-    );
-    _subscriptions.add(subscription);
-    await _saveSubscriptions();
-    return subscription;
+    return _withLock(() async {
+      await _ensureInitialized();
+      if (_subscriptions.any((sub) => sub.url == url)) {
+        throw Exception('Подписка с таким URL уже существует');
+      }
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final random = (timestamp * 31) % 99999;
+      final subscription = Subscription(
+        id: '${timestamp}_$random',
+        name: name,
+        url: url,
+        lastUpdated: DateTime.now().subtract(const Duration(days: 1)),
+        autoUpdate: autoUpdate,
+      );
+      _subscriptions.add(subscription);
+      await _saveSubscriptions();
+      return subscription;
+    });
   }
 
   static Future<void> deleteSubscription(String subscriptionId) async {
-    await _ensureInitialized();
-    _subscriptions.removeWhere((sub) => sub.id == subscriptionId);
-    _servers.removeWhere((s) => s.subscriptionId == subscriptionId);
-    await Future.wait([_saveSubscriptions(), _saveServers()]);
+    return _withLock(() async {
+      await _ensureInitialized();
+      _subscriptions.removeWhere((sub) => sub.id == subscriptionId);
+      _servers.removeWhere((s) => s.subscriptionId == subscriptionId);
+      await Future.wait([_saveSubscriptions(), _saveServers()]);
+    });
   }
 
   static Future<Subscription> updateSubscription(Subscription subscription) async {
-    await _ensureInitialized();
-    final index = _subscriptions.indexWhere((sub) => sub.id == subscription.id);
-    if (index != -1) {
-      _subscriptions[index] = subscription;
-      await _saveSubscriptions();
-      return subscription;
-    } else {
-      throw Exception('Подписка не найдена');
-    }
+    return _withLock(() async {
+      await _ensureInitialized();
+      final index = _subscriptions.indexWhere((sub) => sub.id == subscription.id);
+      if (index != -1) {
+        _subscriptions[index] = subscription;
+        await _saveSubscriptions();
+        return subscription;
+      } else {
+        throw Exception('Подписка не найдена');
+      }
+    });
   }
 
   static Future<void> updateSubscriptionServers(
-      {required String subscriptionId, required String subscriptionName, required List<String> newConfigs}) async {
-    await _ensureInitialized();
-    _servers.removeWhere((s) => s.subscriptionId == subscriptionId);
-    int timestamp = DateTime.now().millisecondsSinceEpoch;
-    final newServers = newConfigs.map((config) => ServerItem(
-          id: '${timestamp++}',
-          config: config,
-          type: ServerItemType.subscription,
-          subscriptionId: subscriptionId,
-          subscriptionName: subscriptionName,
-        ));
-    _servers.addAll(newServers);
-    await _saveServers();
+      {required String subscriptionId,
+        required String subscriptionName,
+        required List<String> newConfigs}) async {
+    return _withLock(() async {
+      await _ensureInitialized();
+      _servers.removeWhere((s) => s.subscriptionId == subscriptionId);
+      int timestamp = DateTime.now().millisecondsSinceEpoch;
+      final newServers = newConfigs.map((config) => ServerItem(
+        id: '${timestamp++}',
+        config: config,
+        type: ServerItemType.subscription,
+        subscriptionId: subscriptionId,
+        subscriptionName: subscriptionName,
+      ));
+      _servers.addAll(newServers);
+      await _saveServers();
+    });
   }
 }

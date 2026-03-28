@@ -13,47 +13,56 @@ class ConnectionStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = ThemeManager();
+    final s = ThemeManager().settings;
+
+    // Цвет точки статуса
+    final dotColor = isConnected
+        ? const Color(0xFF4CAF50)
+        : s.secondaryTextColor.withOpacity(0.5);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: themeManager.settings.accentColor.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
+        color:        s.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border:       Border.all(
           color: isConnected
-              ? Colors.green.withOpacity(0.5)
-              : Colors.white.withOpacity(0.1),
+              ? const Color(0xFF4CAF50).withOpacity(0.4)
+              : s.borderColor,
           width: 1.5,
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 12,
-            height: 12,
+          // Индикаторная точка
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width:  10,
+            height: 10,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isConnected ? Colors.green : Colors.grey,
+              color: dotColor,
               boxShadow: isConnected
                   ? [
                 BoxShadow(
-                  color: Colors.green.withOpacity(0.6),
-                  blurRadius: 8,
-                  spreadRadius: 2,
+                  color:       const Color(0xFF4CAF50).withOpacity(0.5),
+                  blurRadius:  6,
+                  spreadRadius: 1,
                 ),
               ]
                   : null,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Text(
             status,
             style: TextStyle(
-              fontSize: 14,
+              fontSize:   13,
               fontWeight: FontWeight.w600,
-              color: isConnected ? Colors.green : Colors.white70,
+              color: isConnected
+                  ? const Color(0xFF4CAF50)
+                  : s.secondaryTextColor,
             ),
           ),
         ],

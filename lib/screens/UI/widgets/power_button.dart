@@ -20,101 +20,76 @@ class PowerButton extends StatefulWidget {
 class _PowerButtonState extends State<PowerButton> {
   bool _isHovered = false;
 
-  static Color darken(Color c, double factor) {
-    final hsl = HSLColor.fromColor(c);
-    return hsl.withLightness((hsl.lightness * factor).clamp(0.0, 1.0)).toColor();
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager();
     const size = 140.0;
 
-    final dim = widget.isConnected ? 0.45 : 1.0;
-    final topColor = darken(themeManager.settings.primaryColor, dim);
-    final bottomColor = darken(themeManager.settings.secondaryColor, dim);
-    final glowColor = darken(themeManager.settings.primaryColor, dim * 0.85);
+    // Один пастельно-розовый цвет (без градиента) — затемняем при подключении
+    final isDark  = themeManager.settings.isDarkMode;
+    final btnColor = widget.isConnected
+        ? themeManager.settings.powerButtonColor.withOpacity(0.7)
+        : themeManager.settings.powerButtonColor;
 
-    final hoverGlowOpacity = _isHovered && !widget.isConnecting
-        ? (widget.isConnected ? 0.35 : 0.50)
-        : (widget.isConnected ? 0.22 : 0.35);
+    final glowColor   = themeManager.settings.powerButtonGlow;
+    final glowOpacity = _isHovered && !widget.isConnecting
+        ? (isDark ? 0.70 : 0.50)
+        : (isDark ? 0.50 : 0.35);
+    final glowRadius  = _isHovered && !widget.isConnecting ? 32.0 : 22.0;
+    final glowSpread  = _isHovered && !widget.isConnecting ? 8.0  : 4.0;
 
-    final hoverGlowRadius = _isHovered && !widget.isConnecting ? 28.0 : 22.0;
-    final hoverGlowSpread = _isHovered && !widget.isConnecting ? 6.0 : 4.0;
+    // Иконка: пауза когда подключено, питание когда нет
+    final iconData   = widget.isConnected ? Icons.pause : Icons.power_settings_new;
+    final iconColor  = isDark
+        ? Colors.white.withOpacity(_isHovered ? 1.0 : 0.9)
+        : Colors.black.withOpacity(_isHovered ? 0.75 : 0.6);
 
     return MouseRegion(
-      cursor: widget.isConnecting ? SystemMouseCursors.basic : SystemMouseCursors.click,
+      cursor: widget.isConnecting
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onExit:  (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.isConnecting ? null : widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200), // Быстрая анимация hover
-          curve: Curves.easeOut,
-          width: size,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          width:  size,
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [topColor, bottomColor],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: btnColor,
             boxShadow: [
-              // Основной glow
+              // Розовый glow (усиливается при hover и в dark-теме)
               BoxShadow(
-                color: glowColor.withOpacity(hoverGlowOpacity),
-                blurRadius: hoverGlowRadius,
-                spreadRadius: hoverGlowSpread,
+                color:       glowColor.withOpacity(glowOpacity),
+                blurRadius:  glowRadius,
+                spreadRadius: glowSpread,
               ),
-              // Тень
+              // Мягкая тень
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
+                color:      Colors.black.withOpacity(isDark ? 0.45 : 0.15),
+                blurRadius: 8,
+                offset:     const Offset(0, 4),
               ),
             ],
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Внутренний border
-              Container(
-                margin: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withOpacity(_isHovered ? 0.15 : 0.1),
-                    width: 1.5,
-                  ),
-                ),
+          child: Center(
+            child: widget.isConnecting
+                ? CircularProgressIndicator(
+              color:      themeManager.settings.primaryColor,
+              strokeWidth: 3,
+            )
+                : AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                iconData,
+                key:   ValueKey(iconData),
+                color: iconColor,
+                size:  52,
               ),
-              // Блик
-              Align(
-                alignment: const Alignment(-0.25, -0.55),
-                child: Container(
-                  width: size * 0.5,
-                  height: size * 0.3,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.06),
-                  ),
-                ),
-              ),
-              // Иконка
-              Center(
-                child: widget.isConnecting
-                    ? const CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 3,
-                )
-                    : Icon(
-                  Icons.power_settings_new,
-                  color: Colors.white.withOpacity(_isHovered ? 1.0 : 0.95),
-                  size: 56,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

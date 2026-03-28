@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -8,6 +9,16 @@ import 'package:path/path.dart' as path;
 class VpnService {
   Process? _process;
   bool _isRunning = false;
+
+  // FIX: Сохраняем подписки чтобы отменять при stop() — устраняет утечку памяти
+  StreamSubscription<String>? _stdoutSub;
+  StreamSubscription<String>? _stderrSub;
+
+  // FIX: Callback для оповещения CoreManager об изменении состояния
+  VoidCallback? onStateChanged;
+
+  // Конструктор БЕЗ ИЗМЕНЕНИЙ — полная совместимость с существующим кодом
+  VpnService();
 
   bool get isRunning => _isRunning;
 
@@ -42,7 +53,6 @@ class VpnService {
       if (result.exitCode == 0) {
         debugPrint('VpnService: $exeName killed successfully');
         await Future.delayed(const Duration(milliseconds: 500));
-
         await _waitForProcessToTerminate(exeName, maxWaitSeconds: 3);
       } else {
         debugPrint('VpnService: $exeName not running (exit code: ${result.exitCode})');
@@ -53,7 +63,7 @@ class VpnService {
   }
 
   Future<void> _waitForProcessToTerminate(String exeName, {int maxWaitSeconds = 5}) async {
-    final maxAttempts = maxWaitSeconds * 4; // Проверяем каждые 250ms
+    final maxAttempts = maxWaitSeconds * 4;
 
     for (int i = 0; i < maxAttempts; i++) {
       try {
@@ -80,7 +90,6 @@ class VpnService {
 
   Future<void> _prepareAssets() async {
     final dir = await getApplicationSupportDirectory();
-    final canonicalDir = path.canonicalize(dir.path);
 
     for (var fileName in _requiredFiles) {
       if (!_isValidFileName(fileName)) {
@@ -146,6 +155,9 @@ class VpnService {
       String configJson, {
         String executableName = 'xray.exe',
         List<String>? args,
+        // FIX: Опциональный параметр — имя файла конфига. По умолчанию config.json.
+        // Это позволяет xray и sing-box писать в разные файлы.
+        String configFileName = 'config.json',
       }) async {
     if (_isRunning) {
       debugPrint('VpnService: Service already running, stopping first...');
@@ -159,7 +171,8 @@ class VpnService {
     await _killExistingProcess(executableName);
 
     final dir = await getApplicationSupportDirectory();
-    final configPath = path.join(dir.path, 'config.json');
+    // FIX: Используем переданное имя файла вместо жёсткого 'config.json'
+    final configPath = path.join(dir.path, configFileName);
 
     try {
       json.decode(configJson);
@@ -203,18 +216,21 @@ class VpnService {
       _isRunning = true;
       debugPrint('VpnService: Process started (PID: ${_process?.pid})');
 
-      _process?.stdout.transform(utf8.decoder).listen((log) {
+      // FIX: Сохраняем подписки для последующей отмены
+      _stdoutSub = _process?.stdout.transform(utf8.decoder).listen((log) {
         if (kDebugMode) {
           debugPrint('[$executableName] $log');
         }
       });
 
-      _process?.stderr.transform(utf8.decoder).listen((err) {
+      _stderrSub = _process?.stderr.transform(utf8.decoder).listen((err) {
         debugPrint('[$executableName ERROR] $err');
 
         if (err.contains('Failed') || err.contains('panic') || err.contains('FATAL')) {
           debugPrint('VpnService: Critical error detected, marking as not running');
           _isRunning = false;
+          // FIX: Оповещаем CoreManager
+          onStateChanged?.call();
         }
       });
 
@@ -222,12 +238,24 @@ class VpnService {
         debugPrint('VpnService: Process exited with code $code');
         _isRunning = false;
         _process = null;
+        // FIX: Оповещаем CoreManager
+        onStateChanged?.call();
       });
+
+      // FIX: Проверяем что ядро не упало сразу (невалидный конфиг и т.д.)
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!_isRunning || _process == null) {
+        throw Exception('$executableName завершился сразу после запуска — проверьте конфигурацию');
+      }
 
     } catch (e, s) {
       debugPrint('VpnService: Failed to start process: $e\n$s');
       _isRunning = false;
       _process = null;
+      await _stdoutSub?.cancel();
+      await _stderrSub?.cancel();
+      _stdoutSub = null;
+      _stderrSub = null;
       rethrow;
     }
   }
@@ -240,37 +268,53 @@ class VpnService {
 
     debugPrint('VpnService: Stopping service...');
 
+    // FIX: Отменяем stream-подписки — предотвращает утечку памяти
+    await _stdoutSub?.cancel();
+    await _stderrSub?.cancel();
+    _stdoutSub = null;
+    _stderrSub = null;
+
     try {
       final pid = _process?.pid;
 
-      // Сначала пытаемся graceful shutdown
-      _process?.kill(ProcessSignal.sigterm);
+      // FIX: На Windows SIGTERM не работает — используем taskkill
+      if (Platform.isWindows && pid != null) {
+        final result = await Process.run(
+          'taskkill', ['/PID', '$pid'],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 2), onTimeout: () {
+          return ProcessResult(pid, -1, '', 'timeout');
+        });
 
-      // Ждем завершения процесса с таймаутом
-      try {
-        await _process?.exitCode.timeout(
-          const Duration(seconds: 2),
-          onTimeout: () {
-            // Если процесс не завершился за 2 секунды, убиваем принудительно
-            debugPrint('VpnService: Process did not exit gracefully, forcing kill...');
-            _process?.kill(ProcessSignal.sigkill);
-            return -1;
-          },
-        );
-        debugPrint('VpnService: Process stopped gracefully');
-      } catch (e) {
-        debugPrint('VpnService: Error waiting for exit: $e');
+        if (result.exitCode != 0) {
+          debugPrint('VpnService: Graceful stop failed, forcing kill...');
+          await Process.run(
+            'taskkill', ['/F', '/PID', '$pid'],
+            runInShell: false,
+          ).timeout(const Duration(seconds: 2), onTimeout: () {
+            return ProcessResult(pid, -1, '', 'timeout');
+          });
+        }
+      } else {
+        // Linux/macOS
+        _process?.kill(ProcessSignal.sigterm);
+        try {
+          await _process?.exitCode.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () {
+              _process?.kill(ProcessSignal.sigkill);
+              return -1;
+            },
+          );
+        } catch (e) {
+          debugPrint('VpnService: Error waiting for exit: $e');
+        }
       }
 
-      _process = null;
-      _isRunning = false;
-
-      // Дополнительная проверка что процесс завершился
-      await Future.delayed(const Duration(milliseconds: 300));
-      debugPrint('VpnService: Service stopped');
-
+      debugPrint('VpnService: Process stopped');
     } catch (e, s) {
       debugPrint('VpnService: Error during stop: $e\n$s');
+    } finally {
       _process = null;
       _isRunning = false;
     }

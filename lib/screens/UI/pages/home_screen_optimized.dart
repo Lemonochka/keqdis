@@ -20,7 +20,7 @@ import 'package:keqdis/screens/ping_manager.dart';
 import '../widgets/add_server_dialog.dart';
 import '../widgets/custom_notification.dart';
 
-import 'home_sidebar.dart';
+import 'home_top_bar.dart';
 import 'home_main_content.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -52,9 +52,9 @@ class _HomeScreenState extends State<HomeScreen>
   final Map<String, bool> _serverPingingState = {};
 
   AppSettings _settings = AppSettings();
-  bool _tunAvailable = false;
-  bool _isReallyExiting = false;
-  bool _isInitialized = false;
+  bool _tunAvailable      = false;
+  bool _isReallyExiting   = false;
+  bool _isInitialized     = false;
 
   Timer? _autoUpdateTimer;
 
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
 
     _vpnController = VpnController();
-    _pingManager = PingManager();
+    _pingManager   = PingManager();
     _themeManager.addListener(_onThemeChanged);
 
     windowManager.addListener(this);
@@ -120,22 +120,16 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadSettings() async {
     _settings = await SettingsStorage.loadSettings();
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   void _onThemeChanged() {
-    if (mounted) {
-      _updateCachedImage();
-    }
+    if (mounted) _updateCachedImage();
   }
 
   void _updateCachedImage() {
     final newPath = _themeManager.settings.backgroundImagePath;
-    if (_currentBackgroundImagePath == newPath && _cachedBackgroundImageProvider != null) {
-      return;
-    }
+    if (_currentBackgroundImagePath == newPath && _cachedBackgroundImageProvider != null) return;
     _currentBackgroundImagePath = newPath;
 
     if (newPath == null) {
@@ -146,14 +140,14 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final imageProvider = FileImage(File(newPath));
-    final mediaQuery = MediaQuery.of(context);
-    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
-    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+    final mediaQuery    = MediaQuery.of(context);
+    final screenWidth   = (mediaQuery.size.width  * mediaQuery.devicePixelRatio).round();
+    final screenHeight  = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
 
     setState(() {
       _cachedBackgroundImageProvider = ResizeImage(
         imageProvider,
-        width: screenWidth,
+        width:  screenWidth,
         height: screenHeight,
       );
     });
@@ -161,41 +155,31 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _checkTunAvailability() async {
     final available = await TunService.isTunAvailable();
-    if (mounted) {
-      setState(() => _tunAvailable = available);
-    }
+    if (mounted) setState(() => _tunAvailable = available);
   }
 
   Future<void> _initializeTray() async {
     await _trayService.initialize(
-      onShowCallback: () async {
-        await windowManager.show();
-        await windowManager.focus();
-      },
+      onShowCallback:   () async { await windowManager.show(); await windowManager.focus(); },
       onToggleCallback: () => _vpnController.toggleConnection(),
-      onExitCallback: _exitApp,
+      onExitCallback:   _exitApp,
     );
   }
 
   void _startSubscriptionAutoUpdate() {
-    _autoUpdateTimer = Timer.periodic(
-      const Duration(hours: 12),
-          (_) async {
-        try {
-          final dueSubscriptions =
-          await SubscriptionService.getSubscriptionsDueForUpdate(
-            interval: const Duration(hours: 12),
-          );
-
-          if (dueSubscriptions.isNotEmpty) {
-            await SubscriptionService.updateAllSubscriptions();
-            await _vpnController.loadInitialServers();
-          }
-        } catch (e) {
-          debugPrint('Ошибка автообновления: $e');
+    _autoUpdateTimer = Timer.periodic(const Duration(hours: 12), (_) async {
+      try {
+        final due = await SubscriptionService.getSubscriptionsDueForUpdate(
+          interval: const Duration(hours: 12),
+        );
+        if (due.isNotEmpty) {
+          await SubscriptionService.updateAllSubscriptions();
+          await _vpnController.loadInitialServers();
         }
-      },
-    );
+      } catch (e) {
+        debugPrint('Ошибка автообновления: $e');
+      }
+    });
   }
 
   @override
@@ -218,7 +202,6 @@ class _HomeScreenState extends State<HomeScreen>
       await windowManager.hide();
       return AppExitResponse.cancel;
     }
-
     await _exitApp();
     return AppExitResponse.exit;
   }
@@ -238,7 +221,6 @@ class _HomeScreenState extends State<HomeScreen>
       await windowManager.destroy();
       return;
     }
-
     if (_settings.minimizeToTray) {
       await windowManager.hide();
     } else {
@@ -247,25 +229,53 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _showExitConfirmDialog() {
+    final s = _themeManager.settings;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _themeManager.settings.accentColor,
-        title: const Text('Выход'),
-        content: const Text('Вы действительно хотите выйти?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 360),
+          decoration: BoxDecoration(
+            color:        s.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            border:       Border.all(color: s.borderColor),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _exitApp();
-            },
-            child: const Text('Выход'),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Выход', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: s.textColor)),
+              const SizedBox(height: 12),
+              Text('Вы действительно хотите выйти?', style: TextStyle(color: s.secondaryTextColor)),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: s.secondaryTextColor,
+                    side: BorderSide(color: s.borderColor),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Отмена'),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: ElevatedButton(
+                  onPressed: () async { Navigator.pop(ctx); await _exitApp(); },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: s.primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Выйти'),
+                )),
+              ]),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -282,75 +292,79 @@ class _HomeScreenState extends State<HomeScreen>
       _showAdminRequiredDialog();
       return;
     }
-
     if (_vpnController.isConnected) {
       try {
         await _vpnController.disconnect();
         _vpnController.switchVpnMode(newMode);
         await _vpnController.toggleConnection();
-
-        CustomNotification.show(
-          context,
-          message: 'Режим изменен на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
-          type: NotificationType.success,
-        );
+        CustomNotification.show(context,
+            message: 'Режим изменён на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
+            type: NotificationType.success);
       } catch (e) {
-        CustomNotification.show(
-          context,
-          message: 'Ошибка смены режима: $e',
-          type: NotificationType.error,
-        );
+        CustomNotification.show(context, message: 'Ошибка смены режима: $e', type: NotificationType.error);
       }
     } else {
       _vpnController.switchVpnMode(newMode);
-      CustomNotification.show(
-        context,
-        message: 'Режим изменен на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
-        type: NotificationType.success,
-      );
+      CustomNotification.show(context,
+          message: 'Режим изменён на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
+          type: NotificationType.success);
     }
   }
 
   void _showAdminRequiredDialog() {
+    final s = _themeManager.settings;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _themeManager.settings.accentColor,
-        title: Row(
-          children: [
-            Icon(
-              Icons.shield_outlined,
-              color: _themeManager.settings.primaryColor,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text('Требуются права администратора'),
-            ),
-          ],
-        ),
-        content: const Text(
-          'Для использования TUN режима необходим перезапуск приложение от имени администратора.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          decoration: BoxDecoration(
+            color: s.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: s.borderColor),
           ),
-          ElevatedButton.icon(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _restartAsAdmin();
-            },
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Перезапустить с правами администратора'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _themeManager.settings.primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.shield_outlined, color: s.primaryColor, size: 28),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Требуются права администратора',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: s.textColor))),
+              ]),
+              const SizedBox(height: 14),
+              Text('Для TUN режима необходим перезапуск от имени администратора.',
+                  style: TextStyle(color: s.secondaryTextColor)),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: s.secondaryTextColor, side: BorderSide(color: s.borderColor),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Отмена'),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: ElevatedButton.icon(
+                  onPressed: () async { Navigator.pop(ctx); await _restartAsAdmin(); },
+                  icon:  const Icon(Icons.refresh, size: 18),
+                  label: const Text('Перезапустить'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: s.primaryColor, foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                )),
+              ]),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -359,47 +373,29 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       if (Platform.isWindows) {
         final success = await TunService.requestAdminRights();
-
         if (!success && mounted) {
-          CustomNotification.show(
-            context,
-            message: 'Не удалось перезапустить с правами администратора',
-            type: NotificationType.error,
-          );
+          CustomNotification.show(context, message: 'Не удалось перезапустить', type: NotificationType.error);
         }
       } else {
-        CustomNotification.show(
-          context,
-          message: 'Перезапуск с правами администратора доступен только на Windows',
-          type: NotificationType.error,
-        );
+        CustomNotification.show(context, message: 'Доступно только на Windows', type: NotificationType.error);
       }
     } catch (e) {
-      CustomNotification.show(
-        context,
-        message: 'Ошибка перезапуска: $e',
-        type: NotificationType.error,
-      );
+      CustomNotification.show(context, message: 'Ошибка: $e', type: NotificationType.error);
     }
   }
 
   Future<void> _pingServer(ServerItem server) async {
     if (_serverPingingState[server.id] ?? false) return;
-
     setState(() => _serverPingingState[server.id] = true);
-
     try {
       await _pingManager.pingServer(server, _settings.pingType);
     } finally {
-      if (mounted) {
-        setState(() => _serverPingingState[server.id] = false);
-      }
+      if (mounted) setState(() => _serverPingingState[server.id] = false);
     }
   }
 
   Future<void> _pingAllServers(List<ServerItem> servers) async {
-    await _pingManager.pingMultipleServers(servers, _settings.pingType, (server, isComplete) {
-    });
+    await _pingManager.pingMultipleServers(servers, _settings.pingType, (server, isComplete) {});
   }
 
   void _showAddServerDialog() {
@@ -413,15 +409,12 @@ class _HomeScreenState extends State<HomeScreen>
               await _vpnController.addServer(config);
               successCount++;
             } catch (e) {
-              debugPrint('Ошибка добавления сервера: $e');
+              debugPrint('Ошибка добавления: $e');
             }
           }
-
-          CustomNotification.show(
-            context,
-            message: 'Добавлено серверов: $successCount из ${configs.length}',
-            type: NotificationType.success,
-          );
+          CustomNotification.show(context,
+              message: 'Добавлено: $successCount из ${configs.length}',
+              type: NotificationType.success);
         },
       ),
     );
@@ -440,67 +433,77 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildLoadingScreen() {
-    return const Scaffold(
-      backgroundColor: Color(0xFF0A0E27),
-      body: SizedBox.expand(),
+    return Scaffold(
+      backgroundColor: _themeManager.settings.backgroundColor,
+      body: Center(
+        child: CircularProgressIndicator(color: _themeManager.settings.primaryColor),
+      ),
     );
   }
 
   Widget _buildMainContent() {
+    final s = _themeManager.settings;
+
     return Scaffold(
+      backgroundColor: s.backgroundColor,
       body: Stack(
         children: [
+          // ── Фоновое изображение (на весь экран) ───────────────────────
           if (_themeManager.hasCustomBackground && _cachedBackgroundImageProvider != null)
-            Positioned.fill(
-              child: _buildOptimizedBackground(context),
-            ),
-          Row(
+            Positioned.fill(child: _buildOptimizedBackground()),
+
+          // ── Основной контент: TopBar + Content ─────────────────────────
+          Column(
             children: [
-              HomeSidebar(
-                currentTab: _currentTab,
+              HomeTopBar(
+                currentTab:   _currentTab,
                 onTabChanged: (tab) => setState(() => _currentTab = tab),
-              ),
-              Container(
-                width: 1,
-                color: Colors.white.withAlpha(26), // 0.1 opacity
               ),
               Expanded(
                 child: HomeMainContent(
-                  currentTab: _currentTab,
-                  settings: _settings,
-                  tunAvailable: _tunAvailable,
-                  searchController: _searchController,
-                  onSearchChanged: _onSearchChanged,
+                  currentTab:          _currentTab,
+                  settings:            _settings,
+                  tunAvailable:        _tunAvailable,
+                  searchController:    _searchController,
+                  onSearchChanged:     _onSearchChanged,
                   onClearSearch: () {
                     _searchController.clear();
                     _vpnController.searchServers('');
                   },
-                  onAddServer: _showAddServerDialog,
-                  onPingAll: _pingAllServers,
-                  onPing: _pingServer,
-                  serverPingingState: _serverPingingState,
-                  onVpnModeChanged: _handleVpnModeSwitch,
-                  onSettingsChanged: _loadSettings,
+                  onAddServer:         _showAddServerDialog,
+                  onPingAll:           _pingAllServers,
+                  onPing:              _pingServer,
+                  serverPingingState:  _serverPingingState,
+                  onVpnModeChanged:    _handleVpnModeSwitch,
+                  onSettingsChanged:   _loadSettings,
                 ),
               ),
             ],
+          ),
+
+          // ── Версия: плавающая карточка снизу по центру ─────────────────
+          const Positioned(
+            bottom: 14,
+            left:   0,
+            right:  0,
+            child:  _VersionBadge(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOptimizedBackground(BuildContext context) {
+  Widget _buildOptimizedBackground() {
     return Stack(
       fit: StackFit.expand,
       children: [
         Image(
           image: _cachedBackgroundImageProvider!,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            debugPrint('Ошибка загрузки фонового изображения: $error');
+          fit:   BoxFit.cover,   // ← заполняет весь экран включая где была панель
+          errorBuilder: (context, error, _) {
+            debugPrint('Ошибка загрузки фона: $error');
             Future.microtask(() => _themeManager.removeBackground());
-            return Container(color: const Color(0xFF0A0E27));
+            return Container(color: _themeManager.settings.backgroundColor);
           },
         ),
         BackdropFilter(
@@ -515,6 +518,80 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ],
+    );
+  }
+}
+
+class _VersionBadge extends StatefulWidget {
+  const _VersionBadge();
+
+  @override
+  State<_VersionBadge> createState() => _VersionBadgeState();
+}
+
+class _VersionBadgeState extends State<_VersionBadge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<Offset> _slide;
+  late Animation<double>  _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync:    this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _slide = Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _fade  = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
+
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ThemeManager().settings;
+
+    return SlideTransition(
+      position: _slide,
+      child: FadeTransition(
+        opacity: _fade,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            decoration: BoxDecoration(
+              color: s.cardColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: s.borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color:      Colors.black.withOpacity(0.18),
+                  blurRadius: 16,
+                  offset:     const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Text(
+              'v1.4.0',
+              style: TextStyle(
+                color:      s.secondaryTextColor,
+                fontSize:   11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

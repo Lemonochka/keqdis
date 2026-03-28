@@ -20,12 +20,16 @@ class TunService {
     final dllFile = File(dllPath);
     if (await dllFile.exists()) return;
 
+    // FIX: Пробрасываем ошибку вместо проглатывания — без wintun.dll sing-box не запустится
     try {
       final data = await rootBundle.load('assets/bin/$_wintunDllName');
       final bytes = data.buffer.asUint8List();
       await dllFile.writeAsBytes(bytes, flush: true);
     } catch (e) {
-      // Failed to prepare wintun.dll
+      throw Exception(
+          'Не удалось подготовить wintun.dll: $e. '
+              'Sing-box не сможет запуститься без этого файла.'
+      );
     }
   }
 
@@ -39,17 +43,17 @@ class TunService {
   }
 
   static Map<String, dynamic> createTunInbound() {
-    return <String, dynamic>{
+    return {
       "tag": "tun-in",
       "protocol": "tun",
-      "settings": <String, dynamic>{
+      "settings": {
         "name": "keqdis-tun",
         "mtu": 1280,
         "address": ["172.19.0.1/30"],
         "autoRoute": true,
         "strictRoute": true,
       },
-      "sniffing": <String, dynamic>{
+      "sniffing": {
         "enabled": true,
         "destOverride": ["http", "tls", "quic"],
         "metadataOnly": false
@@ -59,17 +63,18 @@ class TunService {
 
   static Future<String> getActiveInterfaceIp() async {
     try {
-      const psCommand = r'Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Virtual -eq $false -and $_.InterfaceDescription -notlike "*TAP*" -and $_.InterfaceDescription -notlike "*Hyper-V*" } | Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress -First 1';
+      const psCommand = r'Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.Virtual -eq $false -and $_.InterfaceDescription -notlike "*TAP*" -and $_.InterfaceDescription -notlike "*Hyper-V*" -and $_.InterfaceDescription -notlike "*tun*" -and $_.InterfaceDescription -notlike "*WireGuard*" } | Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress -First 1';
 
       final result = await Process.run(
         'powershell',
         ['-NoProfile', '-Command', psCommand],
         runInShell: true,
-      );
+      ).timeout(const Duration(seconds: 5)); // FIX: Добавлен таймаут
 
       final ip = result.stdout.toString().trim();
 
-      if (ip.isNotEmpty && ip.split('.').length == 4) {
+      // FIX: Улучшенная валидация IP
+      if (ip.isNotEmpty && _isValidIPv4(ip)) {
         return ip;
       }
 
@@ -77,6 +82,16 @@ class TunService {
     } catch (e) {
       return '';
     }
+  }
+
+  // FIX: Вынесенная валидация IPv4
+  static bool _isValidIPv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    return parts.every((part) {
+      final n = int.tryParse(part);
+      return n != null && n >= 0 && n <= 255;
+    });
   }
 
   static Future<bool> addTunRoute() async => true;
