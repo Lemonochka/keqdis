@@ -24,6 +24,14 @@ class VpnController extends ChangeNotifier {
   String get status => _status;
   VpnMode get vpnMode => _vpnMode;
 
+  /// Use only for one session (no persistence). Useful for autostart fallback.
+  void setVpnModeForSession(VpnMode mode) {
+    if (_vpnMode == mode) return;
+    debugPrint('VpnController: Setting VPN mode for session: ${mode.name}');
+    _vpnMode = mode;
+    notifyListeners();
+  }
+
   List<ServerItem> get allServers => _allServers;
   ServerItem? get selectedServer => _selectedServer;
   List<ServerItem> get favoriteServers => _favoriteServers;

@@ -55,6 +55,10 @@ class ConfigGeneratorV2 {
     final flow = getParam('flow');
     final networkType = getParam('type', 'tcp');
     final security = getParam('security', 'none');
+    final vlessEncryption = (() {
+      final enc = getParam('encryption', 'none').trim();
+      return enc.isEmpty ? 'none' : enc;
+    })();
 
     if (flow == 'xtls-rprx-vision' && networkType != 'tcp' && networkType != 'xhttp') {
       throw ArgumentError(
@@ -72,7 +76,7 @@ class ConfigGeneratorV2 {
             "address": address,
             "port": port,
             "users": [
-              {"id": uuid, "encryption": "none", "flow": flow}
+              {"id": uuid, "encryption": vlessEncryption, "flow": flow}
             ]
           }
         ]
@@ -92,10 +96,36 @@ class ConfigGeneratorV2 {
     final sni = getParam('sni', getParam('host', address));
 
     if (security == 'tls') {
+      // Xray-core v26.2.6+ removed "allowInsecure".
+      // Use:
+      // - pinnedPeerCertSha256 (share param: pcs)
+      // - verifyPeerCertByName (share param: vcn)
+      final allowInsecureRaw = getParam('allowInsecure', '').trim();
+      final allowInsecure = allowInsecureRaw == '1' ||
+          allowInsecureRaw.toLowerCase() == 'true' ||
+          allowInsecureRaw.toLowerCase() == 'yes';
+
+      final pcs = getParam('pcs', getParam('pinnedPeerCertSha256', '')).trim();
+      final vcnRaw = getParam('vcn', getParam('verifyPeerCertByName', '')).trim();
+
+      if (allowInsecure && pcs.isEmpty) {
+        throw ArgumentError(
+          'Параметр allowInsecure устарел/удалён в Xray-core (2026). '
+          'Обновите ссылку/подписку и используйте pcs (pinnedPeerCertSha256) '
+          'и при необходимости vcn (verifyPeerCertByName).',
+        );
+      }
+
       stream['tlsSettings'] = {
         "serverName": sni,
-        "allowInsecure": false,
-        "fingerprint": getParam('fp', '')
+        if (getParam('fp', '').isNotEmpty) "fingerprint": getParam('fp', ''),
+        if (pcs.isNotEmpty) "pinnedPeerCertSha256": pcs,
+        if (vcnRaw.isNotEmpty)
+          "verifyPeerCertByName": vcnRaw
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(),
       };
     } else if (security == 'reality') {
       final publicKey = getParam('pbk');
