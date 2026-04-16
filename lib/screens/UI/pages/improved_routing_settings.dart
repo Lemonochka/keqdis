@@ -175,10 +175,11 @@ class _ImprovedRoutingSettingsPageState
   void _showPresetDialog(BuildContext context, String title,
       Map<String, List<String>> presets, List<String> targetList) {
     final themeManager = ThemeManager();
+    final s = themeManager.settings;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0A0E27),
+        backgroundColor: s.cardColor,
         title: Text(title),
         content: SizedBox(
           width: double.maxFinite,
@@ -186,7 +187,6 @@ class _ImprovedRoutingSettingsPageState
             shrinkWrap: true,
             children: presets.entries.map((entry) {
               return Card(
-                color: themeManager.settings.accentColor.withOpacity(0.3),
                 child: ListTile(
                   title: Text(entry.key,
                       style:
@@ -195,7 +195,7 @@ class _ImprovedRoutingSettingsPageState
                     entry.value.join(', '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    style: TextStyle(fontSize: 11, color: s.secondaryTextColor),
                   ),
                   trailing: IconButton(
                     icon: Icon(Icons.add_circle,
@@ -230,8 +230,8 @@ class _ImprovedRoutingSettingsPageState
     IconData icon = Icons.add,
   }) {
     final themeManager = ThemeManager();
+    final s = themeManager.settings;
     return Card(
-      color: themeManager.settings.accentColor.withOpacity(0.3),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -251,8 +251,8 @@ class _ImprovedRoutingSettingsPageState
                               fontWeight: FontWeight.bold,
                               color: themeManager.settings.primaryColor)),
                       Text(subtitle,
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.grey)),
+                          style: TextStyle(
+                              fontSize: 12, color: s.secondaryTextColor)),
                     ],
                   ),
                 ),
@@ -278,20 +278,20 @@ class _ImprovedRoutingSettingsPageState
                 Expanded(
                   child: TextField(
                     controller: controller,
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: s.textColor),
                     decoration: InputDecoration(
                       hintText: placeholder,
                       hintStyle:
-                      TextStyle(color: Colors.white.withOpacity(0.3)),
+                      TextStyle(color: s.secondaryTextColor.withOpacity(0.7)),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: s.searchBarColor,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 12),
-                      prefixIcon: const Icon(Icons.edit, size: 18),
+                      prefixIcon: Icon(Icons.edit, size: 18, color: s.secondaryTextColor),
                     ),
                     onSubmitted: (_) => onAdd(),
                   ),
@@ -311,7 +311,7 @@ class _ImprovedRoutingSettingsPageState
                   padding: const EdgeInsets.all(16),
                   child: Text('Нет элементов',
                       style: TextStyle(
-                          color: Colors.white.withOpacity(0.3))),
+                          color: s.secondaryTextColor.withOpacity(0.7))),
                 ),
               )
             else
@@ -321,19 +321,18 @@ class _ImprovedRoutingSettingsPageState
                 children: items.map((item) {
                   return Chip(
                     label: Text(item,
-                        style: const TextStyle(fontSize: 12)),
-                    backgroundColor:
-                    themeManager.settings.primaryColor.withOpacity(0.2),
+                        style: TextStyle(fontSize: 12, color: s.textColor)),
+                    backgroundColor: themeManager.settings.primaryColor.withOpacity(0.12),
                     deleteIcon: const Icon(Icons.close, size: 16),
                     onDeleted: () => _removeDomain(items, item),
-                    deleteIconColor: Colors.white70,
+                    deleteIconColor: s.secondaryTextColor,
                   );
                 }).toList(),
               ),
             const SizedBox(height: 8),
             Text('Всего: ${items.length}',
                 style: TextStyle(
-                    fontSize: 11, color: Colors.white.withOpacity(0.5))),
+                    fontSize: 11, color: s.secondaryTextColor.withOpacity(0.7))),
           ],
         ),
       ),
@@ -346,7 +345,6 @@ class _ImprovedRoutingSettingsPageState
     final themeManager = ThemeManager();
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: themeManager.settings.accentColor.withOpacity(0.9),
         title: const Text('Маршрутизация'),
         actions: [
           IconButton(
@@ -359,7 +357,7 @@ class _ImprovedRoutingSettingsPageState
           indicatorColor: themeManager.settings.primaryColor,
           indicatorWeight: 3,
           labelColor: themeManager.settings.primaryColor,
-          unselectedLabelColor: Colors.white54,
+          unselectedLabelColor: themeManager.settings.secondaryTextColor,
           tabs: const [
             Tab(icon: Icon(Icons.public, size: 18), text: 'Домены и IP'),
             Tab(icon: Icon(Icons.apps, size: 18), text: 'Приложения'),
@@ -509,10 +507,11 @@ class _ImprovedRoutingSettingsPageState
   }
 
   void _showHelpDialog(BuildContext context) {
+    final s = ThemeManager().settings;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0A0E27),
+        backgroundColor: s.cardColor,
         title: const Row(
           children: [
             Icon(Icons.help_outline, color: Colors.blue),
@@ -528,34 +527,34 @@ class _ImprovedRoutingSettingsPageState
               const Text('Прямое подключение (Direct)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                   'Домены открываются напрямую без VPN.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
               const SizedBox(height: 16),
               const Text('Принудительно через VPN (Proxy)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                   'Домены всегда идут через VPN, независимо от других правил.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
               const SizedBox(height: 16),
               const Text('Заблокированные (Block)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
-              const Text('Полностью запрещённый доступ к домену.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('Полностью запрещённый доступ к домену.',
+                  style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
               const SizedBox(height: 16),
               const Text('Приложения (только TUN-режим)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                   'Выбранные приложения будут маршрутизироваться через VPN по имени процесса.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
               const SizedBox(height: 16),
               const Text('Форматы записей:',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                   '• TLD: ru, com, net\n'
                       '• Домен: google.com, yandex.ru\n'
                       '• Поддомены: .google.com\n'
@@ -563,7 +562,7 @@ class _ImprovedRoutingSettingsPageState
                       '• CIDR: 192.168.0.0/16\n'
                       '• Точное: full:example.com\n'
                       '• Regex: regexp:.*\\.ads\\..*',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  style: TextStyle(fontSize: 12, color: s.secondaryTextColor)),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),

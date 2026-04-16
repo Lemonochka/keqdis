@@ -85,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _initializeApp() async {
     try {
+      // Сначала загружаем настройки и серверы
       await Future.wait([
         _vpnController.loadInitialServers(),
         _loadSettings(),
@@ -96,10 +97,16 @@ class _HomeScreenState extends State<HomeScreen>
       await _initializeTray();
 
       _vpnController.addListener(_updateTrayStatus);
-
       _startSubscriptionAutoUpdate();
 
-      if (_settings.autoConnectLastServer && !widget.startMinimized) {
+      // Автоподключение только при автозапуске (старт Windows), а не при ручном перезапуске приложения.
+      if (widget.isAutoStarted && _settings.autoConnectLastServer) {
+        // Если сохранён TUN, но приложение запущено без админ-прав, падаем на systemProxy.
+        if (_vpnController.vpnMode == VpnMode.tun && !await TunService.hasAdminRights()) {
+          debugPrint('Auto-connect: no admin rights for TUN, falling back to systemProxy');
+          _vpnController.setVpnModeForSession(VpnMode.systemProxy);
+        }
+        debugPrint('Auto-connecting to last server (autostart only)...');
         await _vpnController.autoConnectToLastServer();
       }
 
@@ -560,6 +567,7 @@ class _VersionBadgeState extends State<_VersionBadge>
   @override
   Widget build(BuildContext context) {
     final s = ThemeManager().settings;
+    final scheme = Theme.of(context).colorScheme;
 
     return SlideTransition(
       position: _slide,
@@ -581,9 +589,9 @@ class _VersionBadgeState extends State<_VersionBadge>
               ],
             ),
             child: Text(
-              'v1.4.0',
+              'v1.5.0',
               style: TextStyle(
-                color:      s.secondaryTextColor,
+                color: scheme.onSurfaceVariant.withOpacity(0.85),
                 fontSize:   11,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.5,

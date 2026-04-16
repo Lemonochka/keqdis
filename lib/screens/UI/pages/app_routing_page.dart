@@ -187,8 +187,12 @@ class _AppRoutingPageState extends State<AppRoutingPage>
   @override
   Widget build(BuildContext context) {
     final theme = ThemeManager();
-    final primary = theme.settings.primaryColor;
-    final accent = theme.settings.accentColor;
+    final s = theme.settings;
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
+    final accent = scheme.surface;
+    final text = s.textColor;
+    final subtext = s.secondaryTextColor;
 
     return Column(children: [
       Padding(
@@ -216,38 +220,38 @@ class _AppRoutingPageState extends State<AppRoutingPage>
           padding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.amber.withOpacity(0.08),
+            color: scheme.tertiaryContainer.withOpacity(0.35),
             borderRadius: BorderRadius.circular(8),
             border:
-            Border.all(color: Colors.amber.withOpacity(0.3)),
+            Border.all(color: scheme.tertiary.withOpacity(0.35)),
           ),
           child: Row(children: [
             Icon(Icons.info_outline,
-                color: Colors.amber[600], size: 16),
+                color: scheme.tertiary, size: 16),
             const SizedBox(width: 8),
             Expanded(
                 child: Text(
                   'Работает только в TUN-режиме',
                   style: TextStyle(
-                      fontSize: 11, color: Colors.amber[300]),
+                      fontSize: 11, color: scheme.onTertiaryContainer),
                 )),
           ]),
         ),
       ),
 
       if (_routingMode == AppRoutingMode.allProxy) ...[
-        const Expanded(child: Center(child: Column(
+        Expanded(child: Center(child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.public, size: 48, color: Colors.white24),
-            SizedBox(height: 12),
+            Icon(Icons.public, size: 48, color: subtext.withOpacity(0.35)),
+            const SizedBox(height: 12),
             Text('Весь трафик идёт через VPN',
-                style: TextStyle(fontSize: 15, color: Colors.white54,
-                    fontWeight: FontWeight.w500)),
-            SizedBox(height: 4),
+                style: TextStyle(fontSize: 15, color: text,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
             Text('Выберите другой режим для настройки\nмаршрутизации по приложениям',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.white30)),
+                style: TextStyle(fontSize: 11, color: subtext)),
           ],
         ))),
       ] else ...[
@@ -255,9 +259,9 @@ class _AppRoutingPageState extends State<AppRoutingPage>
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Container(
             decoration: BoxDecoration(
-              color: accent.withOpacity(0.12),
+              color: s.cardColor,
               borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white.withOpacity(0.07)),
+              border: Border.all(color: s.borderColor),
             ),
             child: TabBar(
               controller: _tabController,
@@ -266,7 +270,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
               indicatorWeight: 2,
               indicatorSize: TabBarIndicatorSize.tab,
               labelColor: primary,
-              unselectedLabelColor: Colors.white38,
+              unselectedLabelColor: subtext,
               dividerColor: Colors.transparent,
               indicator: BoxDecoration(
                 color: primary.withOpacity(0.12),
@@ -296,24 +300,24 @@ class _AppRoutingPageState extends State<AppRoutingPage>
             Expanded(child: Container(
               height: 38,
               decoration: BoxDecoration(
-                color: accent.withOpacity(0.16),
+                color: s.searchBarColor,
                 borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: Colors.white.withOpacity(0.07)),
+                border: Border.all(color: s.borderColor),
               ),
               child: TextField(
                 controller: _searchCtrl,
                 onChanged: _onSearch,
-                style: const TextStyle(fontSize: 13, color: Colors.white),
+                style: TextStyle(fontSize: 13, color: text),
                 decoration: InputDecoration(
                   hintText: 'Поиск...',
                   hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.28), fontSize: 13),
+                      color: subtext.withOpacity(0.7), fontSize: 13),
                   prefixIcon: Icon(Icons.search, size: 16,
-                      color: Colors.white.withOpacity(0.3)),
+                      color: subtext.withOpacity(0.7)),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                       icon: Icon(Icons.close, size: 14,
-                          color: Colors.white.withOpacity(0.35)),
+                          color: subtext.withOpacity(0.8)),
                       onPressed: () { _searchCtrl.clear(); _onSearch(''); })
                       : null,
                   border: InputBorder.none,
@@ -341,7 +345,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
               const SizedBox(width: 5),
             ],
             _iconBtn(Icons.refresh, 'Обновить',
-                _isLoading ? null : _loadCurrent, Colors.white54),
+                _isLoading ? null : _loadCurrent, subtext),
             if (_vpnApps.isNotEmpty) ...[
               const SizedBox(width: 4),
               _iconBtn(Icons.clear_all, 'Снять все',
@@ -365,17 +369,18 @@ class _AppRoutingPageState extends State<AppRoutingPage>
           child: Container(
             width: 35, height: 35,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
+              color: ThemeManager().settings.cardColor,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withOpacity(0.07)),
+              border: Border.all(color: ThemeManager().settings.borderColor),
             ),
             child: Icon(icon, size: 16,
-                color: fn == null ? Colors.white24 : color),
+                color: fn == null ? ThemeManager().settings.secondaryTextColor.withOpacity(0.4) : color),
           ),
         ),
       );
 
   Widget _buildContent(Color primary, Color accent) {
+    final s = ThemeManager().settings;
     if (_isLoading) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(width: 26, height: 26,
@@ -386,7 +391,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                 ? 'Получение запущенных процессов...'
                 : 'Загрузка приложений...',
             style: TextStyle(
-                color: Colors.white.withOpacity(0.38), fontSize: 12)),
+                color: s.secondaryTextColor.withOpacity(0.8), fontSize: 12)),
       ]));
     }
 
@@ -397,7 +402,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
         const SizedBox(height: 8),
         Text('Не удалось загрузить список',
             style: TextStyle(
-                color: Colors.white.withOpacity(0.45), fontSize: 13)),
+                color: s.secondaryTextColor.withOpacity(0.9), fontSize: 13)),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: _loadCurrent,
@@ -417,14 +422,14 @@ class _AppRoutingPageState extends State<AppRoutingPage>
               ? 'Нет запущенных приложений'
               : 'Приложения не найдены',
           style: TextStyle(
-              color: Colors.white.withOpacity(0.3), fontSize: 13)));
+              color: s.secondaryTextColor.withOpacity(0.8), fontSize: 13)));
     }
 
     if (_filtered.isEmpty) {
       return Center(child: Text(
           'Ничего не найдено: "$_searchQuery"',
           style: TextStyle(
-              color: Colors.white.withOpacity(0.3), fontSize: 13)));
+              color: s.secondaryTextColor.withOpacity(0.8), fontSize: 13)));
     }
 
     return ListView.builder(
@@ -453,16 +458,18 @@ class _ReconnectBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final s = ThemeManager().settings;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.12),
+        color: scheme.tertiaryContainer.withOpacity(0.4),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.orange.withOpacity(0.45)),
+        border: Border.all(color: scheme.tertiary.withOpacity(0.45)),
       ),
       child: Row(children: [
-        Icon(Icons.sync_problem_rounded, color: Colors.orange[400], size: 18),
+        Icon(Icons.sync_problem_rounded, color: scheme.tertiary, size: 18),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -474,13 +481,13 @@ class _ReconnectBanner extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.orange[300]),
+                    color: scheme.onTertiaryContainer),
               ),
               const SizedBox(height: 1),
               Text(
                 'Для применения нужно переподключиться',
                 style: TextStyle(
-                    fontSize: 10, color: Colors.orange[200]?.withOpacity(0.75)),
+                    fontSize: 10, color: scheme.onTertiaryContainer.withOpacity(0.8)),
               ),
             ],
           ),
@@ -493,20 +500,20 @@ class _ReconnectBanner extends StatelessWidget {
               padding:
               const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.22),
+                color: scheme.tertiary.withOpacity(0.14),
                 borderRadius: BorderRadius.circular(7),
                 border:
-                Border.all(color: Colors.orange.withOpacity(0.55)),
+                Border.all(color: scheme.tertiary.withOpacity(0.55)),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.refresh_rounded,
-                    size: 13, color: Colors.orange[300]),
+                    size: 13, color: scheme.tertiary),
                 const SizedBox(width: 4),
                 Text('Переподключить',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Colors.orange[300])),
+                        color: scheme.tertiary)),
               ]),
             ),
           ),
@@ -515,7 +522,7 @@ class _ReconnectBanner extends StatelessWidget {
         GestureDetector(
           onTap: onDismiss,
           child: Icon(Icons.close, size: 15,
-              color: Colors.white.withOpacity(0.3)),
+              color: s.secondaryTextColor.withOpacity(0.7)),
         ),
       ]),
     );
@@ -537,7 +544,7 @@ class _ModeSelector extends StatelessWidget {
     children: [
       Text('Режим маршрутизации',
           style: TextStyle(fontSize: 11,
-              color: Colors.white.withOpacity(0.4),
+              color: ThemeManager().settings.secondaryTextColor.withOpacity(0.8),
               fontWeight: FontWeight.w500)),
       const SizedBox(height: 6),
       Row(children: AppRoutingMode.values.map((m) {
@@ -575,21 +582,21 @@ class _ModeBtn extends StatelessWidget {
       duration: const Duration(milliseconds: 170),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
       decoration: BoxDecoration(
-        color: selected ? primary.withOpacity(0.18) : accent.withOpacity(0.1),
+        color: selected ? primary.withOpacity(0.14) : ThemeManager().settings.cardColor,
         borderRadius: BorderRadius.circular(9),
         border: Border.all(
-          color: selected ? primary.withOpacity(0.55) : Colors.white.withOpacity(0.07),
+          color: selected ? primary.withOpacity(0.55) : ThemeManager().settings.borderColor,
           width: selected ? 1.5 : 1.0,
         ),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(_icon, size: 17,
-            color: selected ? primary : Colors.white38),
+            color: selected ? primary : ThemeManager().settings.secondaryTextColor),
         const SizedBox(height: 3),
         Text(mode.label, textAlign: TextAlign.center,
             style: TextStyle(fontSize: 10,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? Colors.white : Colors.white38)),
+                color: selected ? ThemeManager().settings.textColor : ThemeManager().settings.secondaryTextColor)),
       ]),
     ),
   );
@@ -630,12 +637,12 @@ class _AppTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: isSelected
                 ? primary.withOpacity(0.11)
-                : accent.withOpacity(0.09),
+                : ThemeManager().settings.cardColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
                   ? primary.withOpacity(0.38)
-                  : Colors.white.withOpacity(0.05),
+                  : ThemeManager().settings.borderColor,
               width: isSelected ? 1.2 : 1.0,
             ),
           ),
@@ -652,9 +659,7 @@ class _AppTile extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: isSelected
                             ? FontWeight.w600 : FontWeight.w400,
-                        color: isSelected
-                            ? Colors.white
-                            : Colors.white.withOpacity(0.82)),
+                        color: ThemeManager().settings.textColor),
                     maxLines: 1, overflow: TextOverflow.ellipsis),
                 if (app.installLocation == null &&
                     app.publisher == null &&
@@ -662,17 +667,17 @@ class _AppTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(children: [
                     Icon(Icons.schedule, size: 10,
-                        color: Colors.white.withOpacity(0.28)),
+                        color: ThemeManager().settings.secondaryTextColor.withOpacity(0.7)),
                     const SizedBox(width: 3),
                     Text('Не найдено в текущем списке',
                         style: TextStyle(fontSize: 10,
-                            color: Colors.white.withOpacity(0.28))),
+                            color: ThemeManager().settings.secondaryTextColor.withOpacity(0.7))),
                   ]),
                 ] else if (app.publisher?.isNotEmpty == true) ...[
                   const SizedBox(height: 1),
                   Text(app.publisher!,
                       style: TextStyle(fontSize: 11,
-                          color: Colors.white.withOpacity(0.32)),
+                          color: ThemeManager().settings.secondaryTextColor.withOpacity(0.8)),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ],
@@ -684,13 +689,13 @@ class _AppTile extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: 115),
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: ThemeManager().settings.searchBarColor,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.white.withOpacity(0.07)),
+                border: Border.all(color: ThemeManager().settings.borderColor),
               ),
               child: Text(app.executableName,
                   style: TextStyle(fontSize: 10,
-                      color: Colors.white.withOpacity(0.3),
+                      color: ThemeManager().settings.secondaryTextColor.withOpacity(0.8),
                       fontFamily: 'monospace'),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
@@ -704,7 +709,7 @@ class _AppTile extends StatelessWidget {
                 color: isSelected ? primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
-                  color: isSelected ? primary : Colors.white.withOpacity(0.2),
+                  color: isSelected ? primary : ThemeManager().settings.borderColor,
                   width: 1.5,
                 ),
               ),

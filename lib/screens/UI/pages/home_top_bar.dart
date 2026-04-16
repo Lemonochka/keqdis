@@ -19,6 +19,7 @@ class HomeTopBar extends StatelessWidget {
     final themeManager  = Provider.of<ThemeManager>(context);
     final s             = themeManager.settings;
     final hasBackground = themeManager.hasCustomBackground;
+    final scheme = Theme.of(context).colorScheme;
 
     return ClipRect(
       child: BackdropFilter(
@@ -32,7 +33,7 @@ class HomeTopBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: hasBackground
                 ? Colors.black.withOpacity(0.28)
-                : s.sidebarColor,
+                : scheme.surface,
             border: Border(
               bottom: BorderSide(color: s.borderColor, width: 1),
             ),
@@ -140,16 +141,11 @@ class _TabIconButtonState extends State<_TabIconButton>
   @override
   Widget build(BuildContext context) {
     final s = widget.settings;
+    final scheme = Theme.of(context).colorScheme;
 
     return Tooltip(
       message:    widget.tooltip,
       preferBelow: true,
-      decoration: BoxDecoration(
-        color:        s.cardColor.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(8),
-        border:       Border.all(color: s.borderColor),
-      ),
-      textStyle: TextStyle(color: s.textColor, fontSize: 12),
       child: MouseRegion(
         onEnter: (_) {
           setState(() => _hovered = true);
@@ -159,32 +155,36 @@ class _TabIconButtonState extends State<_TabIconButton>
           setState(() => _hovered = false);
           _scaleCtrl.reverse();
         },
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: ScaleTransition(
-            scale: _scale,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve:    Curves.easeOutCubic,
-              margin:   const EdgeInsets.symmetric(horizontal: 3),
-              padding:  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                // M3 Expressive: pill indicator when active
-                color: isActive
-                    ? s.primaryColor.withOpacity(0.2)
-                    : _hovered
-                    ? s.primaryColor.withOpacity(0.08)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                widget.icon,
-                size:  22,
-                color: isActive
-                    ? s.primaryColor
-                    : _hovered
-                    ? s.primaryColor.withOpacity(0.8)
-                    : ThemeSettings.inactiveNavColor,
+        child: ScaleTransition(
+          scale: _scale,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onTap,
+              borderRadius: BorderRadius.circular(20),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  // M3 Expressive: pill indicator when active
+                  color: isActive
+                      ? scheme.primary.withOpacity(0.18)
+                      : _hovered
+                          ? scheme.primary.withOpacity(0.08)
+                          : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: 22,
+                  color: isActive
+                      ? scheme.primary
+                      : _hovered
+                          ? scheme.primary.withOpacity(0.85)
+                          : ThemeSettings.inactiveNavColor,
+                ),
               ),
             ),
           ),

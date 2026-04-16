@@ -8,7 +8,8 @@ import 'storages/improved_settings_storage.dart';
 import 'screens/improved_theme_manager.dart';
 import 'utils/single_instance_manager.dart';
 import 'screens/UI/pages/home_screen_optimized.dart';
-import 'screens/UI/widgets/custom_notification.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,8 @@ void main() async {
   final isAutoStarted = args.contains('--autostart') || args.contains('--minimized');
   final isElevated = args.contains('--elevated');
 
-  final shouldStartMinimized = settings.startMinimized;
+  // При автозапуске используем настройку или флаг аргумента
+  final shouldStartMinimized = settings.startMinimized || isAutoStarted;
 
   debugPrint('App started with args: $args');
   debugPrint('Auto-started: $isAutoStarted, Elevated: $isElevated, StartMinimized: $shouldStartMinimized');
@@ -51,18 +53,20 @@ void main() async {
   await windowManager.setMinimumSize(windowOptions.minimumSize!);
   await windowManager.center();
 
-  // FIX: Перехватываем закрытие окна для гарантированной очистки
   await windowManager.setPreventClose(true);
 
-  if (!shouldStartMinimized) {
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-      debugPrint('Window shown');
-    });
-  } else {
-    debugPrint('Starting minimized to tray');
-  }
+  // Always wait for the window to be ready, otherwise on Windows the window
+  // can briefly appear even when we intend to start minimized.
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    if (shouldStartMinimized) {
+      debugPrint('Starting minimized to tray');
+      await windowManager.hide();
+      return;
+    }
+    await windowManager.show();
+    await windowManager.focus();
+    debugPrint('Window shown');
+  });
 
   runApp(MyApp(
     isAutoStarted: isAutoStarted,
@@ -102,27 +106,23 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-// FIX: Добавлен WindowListener для надёжного перехвата закрытия на Windows
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver, WindowListener {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // FIX: Подписываемся на события окна
     windowManager.addListener(this);
     debugPrint('App lifecycle observer registered');
   }
 
   @override
   void dispose() {
-    // FIX: Отписываемся от событий окна
     windowManager.removeListener(this);
     WidgetsBinding.instance.removeObserver(this);
     debugPrint('App lifecycle observer removed');
     super.dispose();
   }
 
-  // FIX: Используем onWindowClose вместо ненадёжного didChangeAppLifecycleState
   @override
   void onWindowClose() async {
     debugPrint('Window close requested, running cleanup...');
@@ -133,7 +133,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver, WindowListen
   @override
   Future<bool> didChangeAppLifecycleState(AppLifecycleState state) async {
     debugPrint('App lifecycle state changed: $state');
-    // FIX: Убрали обработку detached — теперь очистка через onWindowClose
     return false;
   }
 
@@ -142,7 +141,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver, WindowListen
       debugPrint('Cleanup: Stopping VPN processes...');
 
       if (Platform.isWindows) {
-        // FIX: Запускаем kill процессов параллельно для ускорения
         await Future.wait([
           _killProcess('xray.exe'),
           _killProcess('sing-box.exe'),
@@ -163,7 +161,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver, WindowListen
     }
   }
 
-  // FIX: Вынесенный метод для убийства процесса
   Future<void> _killProcess(String exeName) async {
     try {
       final result = await Process.run(

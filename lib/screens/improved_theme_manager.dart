@@ -69,12 +69,18 @@ class ThemeSettings {
   bool get isGlassmorphism => backgroundImagePath != null;
 
   Color get textColor {
-    if (isGlassmorphism) return Colors.white;
+    if (isGlassmorphism) {
+      // Avoid pure white in light mode to reduce glare.
+      return isDarkMode ? Colors.white : const Color(0xFFF6EEF2);
+    }
     return isDarkMode ? _AppColors.darkText : _AppColors.lightText;
   }
 
   Color get secondaryTextColor {
-    if (isGlassmorphism) return Colors.white.withOpacity(0.65);
+    if (isGlassmorphism) {
+      final base = isDarkMode ? Colors.white : const Color(0xFFF6EEF2);
+      return base.withOpacity(0.70);
+    }
     return isDarkMode ? _AppColors.darkSecText : _AppColors.lightSecText;
   }
 
@@ -89,7 +95,8 @@ class ThemeSettings {
   }
 
   Color get sidebarColor {
-    if (isGlassmorphism) return Colors.transparent;
+    // In glassmorphism mode we still need a readable surface for AppBars / side panels.
+    if (isGlassmorphism) return Colors.black.withOpacity(0.22);
     return isDarkMode ? _AppColors.darkSidebar : _AppColors.lightSidebar;
   }
 
@@ -211,49 +218,131 @@ class ThemeManager extends ChangeNotifier {
   void toggleDarkMode() => setDarkMode(!_settings.isDarkMode);
 
   ThemeData getThemeData() {
-    final dark   = _settings.isDarkMode;
-    final bgColor = hasCustomBackground
-        ? Colors.transparent
-        : _settings.backgroundColor;
+    final isDark = _settings.isDarkMode;
+    final brightness = isDark ? Brightness.dark : Brightness.light;
 
-    final colorScheme = dark
-        ? ColorScheme.fromSeed(
-      seedColor:  _AppColors.darkPrimary,
-      brightness: Brightness.dark,
+    // When glassmorphism background is enabled, the "real" background is drawn
+    // by the page, so the Scaffold should stay transparent.
+    final scaffoldBg = hasCustomBackground ? Colors.transparent : _settings.backgroundColor;
+
+    final seed = _settings.primaryColor;
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
     ).copyWith(
-      primary:    _AppColors.darkPrimary,
-      secondary:  _AppColors.darkSecondary,
-      surface:    _AppColors.darkAccent,
-      background: _AppColors.darkBackground,
-    )
-        : ColorScheme.fromSeed(
-      seedColor:  _AppColors.lightPrimary,
-      brightness: Brightness.light,
-    ).copyWith(
-      primary:    _AppColors.lightPrimary,
-      secondary:  _AppColors.lightSecondary,
-      surface:    _AppColors.lightAccent,
-      background: _AppColors.lightBackground,
+      primary: _settings.primaryColor,
+      secondary: _settings.secondaryColor,
+      surface: _settings.accentColor,
+      // Keep background aligned with your custom theme model.
+      surfaceTint: _settings.primaryColor,
     );
 
-    return ThemeData(
-      useMaterial3:           true,
-      colorScheme:            colorScheme,
-      scaffoldBackgroundColor: bgColor,
-      cardTheme: const CardThemeData(
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scaffoldBg,
+      visualDensity: VisualDensity.standard,
+    );
+
+    // Material 3 "Expressive" feel: rounder shapes, calmer elevations,
+    // consistent component theming, and better default typography.
+    final radius = BorderRadius.circular(16);
+
+    return base.copyWith(
+      dividerTheme: DividerThemeData(
+        color: _settings.borderColor,
+        thickness: 1,
+        space: 1,
+      ),
+      appBarTheme: AppBarTheme(
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+        scrolledUnderElevation: 0,
+        backgroundColor: hasCustomBackground
+            ? Colors.black.withOpacity(0.22)
+            : scheme.surface,
+        foregroundColor: _settings.textColor,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: base.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: _settings.textColor,
         ),
       ),
-      dividerColor: dark ? _AppColors.darkBorder : _AppColors.lightBorder,
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: _settings.cardColor,
+        surfaceTintColor: Colors.transparent,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: radius),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: hasCustomBackground ? Colors.transparent : scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: radius),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: scheme.inverseSurface,
+        contentTextStyle: base.textTheme.bodyMedium?.copyWith(color: scheme.onInverseSurface),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: _settings.cardColor.withOpacity(0.96),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _settings.borderColor),
+        ),
+        textStyle: base.textTheme.bodySmall?.copyWith(color: _settings.textColor),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          side: BorderSide(color: _settings.borderColor),
+          textStyle: base.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          foregroundColor: scheme.primary,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: _settings.searchBarColor,
+        hintStyle: base.textTheme.bodyMedium?.copyWith(color: _settings.secondaryTextColor),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: _settings.borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: _settings.borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.primary, width: 1.2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((s) =>
-        s.contains(MaterialState.selected) ? _AppColors.lightPrimary : null),
-        trackColor: MaterialStateProperty.resolveWith((s) =>
-        s.contains(MaterialState.selected)
-            ? _AppColors.lightPrimary.withOpacity(0.5)
-            : null),
+        thumbColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected) ? scheme.primary : null),
+        trackColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected) ? scheme.primary.withOpacity(0.45) : null),
       ),
     );
   }

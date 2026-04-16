@@ -188,7 +188,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
           Column(
             children: [
               AppBar(
-                backgroundColor: _themeManager.settings.accentColor.withAlpha(230),
                 title: const Text('Настройки темы'),
               ),
               Expanded(
@@ -200,13 +199,12 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: _themeManager.settings.primaryColor,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 16),
 
                     Card(
-                      color: _themeManager.settings.accentColor.withAlpha(77),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -336,10 +334,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                   onPressed: _pickImage,
                                   icon: const Icon(Icons.image),
                                   label: const Text('Выбрать изображение'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _themeManager.settings.primaryColor,
-                                    padding: const EdgeInsets.all(16),
-                                  ),
+                                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -388,7 +383,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: _themeManager.settings.primaryColor,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -452,7 +447,6 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
   Widget _buildColorCard(String title, Color color, VoidCallback onTap) {
     return Card(
-      color: _themeManager.settings.accentColor.withAlpha(77),
       child: ListTile(
         title: Text(title),
         leading: Container(

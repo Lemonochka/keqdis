@@ -71,6 +71,7 @@ class HomeMainContent extends StatelessWidget {
   Widget _buildServerList(BuildContext context) {
     final themeManager = Provider.of<ThemeManager>(context);
     final s = themeManager.settings;
+    final scheme = Theme.of(context).colorScheme;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,7 +176,7 @@ class HomeMainContent extends StatelessWidget {
         ),
 
         // ── Вертикальный разделитель ───────────────────────────────────────
-        Container(width: 1, color: s.borderColor),
+        VerticalDivider(width: 1, thickness: 1, color: s.borderColor),
 
         // ── Правая панель: кнопка питания + режим VPN ─────────────────────
         // Glassmorphism когда есть фоновое изображение
@@ -188,7 +189,7 @@ class HomeMainContent extends StatelessWidget {
               width: 260,
               color: themeManager.hasCustomBackground
                   ? Colors.black.withOpacity(0.22)
-                  : (s.isDarkMode ? s.sidebarColor : s.sidebarColor.withOpacity(0.85)),
+                  : scheme.surface,
               child: Column(
                 children: [
                   const Spacer(),
@@ -366,28 +367,28 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width:  38,
-        height: 38,
-        decoration: BoxDecoration(
-          color:        settings.primaryColor.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(10),
-          border:       Border.all(color: settings.primaryColor.withOpacity(0.3)),
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      width: 40,
+      height: 40,
+      child: IconButton.filledTonal(
+        onPressed: onTap,
+        style: IconButton.styleFrom(
+          backgroundColor: scheme.primaryContainer.withOpacity(0.55),
+          foregroundColor: scheme.onPrimaryContainer,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        child: Center(
-          child: isLoading
-              ? SizedBox(
-            width: 18, height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: settings.primaryColor,
-            ),
-          )
-              : Icon(icon, color: settings.primaryColor, size: 20),
-        ),
+        icon: isLoading
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: scheme.onPrimaryContainer,
+                ),
+              )
+            : Icon(icon, size: 20),
       ),
     );
   }
@@ -409,41 +410,38 @@ class _ServerInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding:    const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color:        settings.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border:       Border.all(color: settings.borderColor),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isEmpty)
-            Icon(Icons.info_outline, size: 26, color: settings.secondaryTextColor),
-          if (isEmpty) const SizedBox(height: 6),
-          Text(
-            title,
-            style: TextStyle(
-              color:    settings.secondaryTextColor,
-              fontSize: 11,
-            ),
-          ),
-          if (body.isNotEmpty) ...[
-            const SizedBox(height: 6),
+    final textTheme = Theme.of(context).textTheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isEmpty) ...[
+              Icon(Icons.info_outline, size: 26, color: settings.secondaryTextColor),
+              const SizedBox(height: 6),
+            ],
             Text(
-              body,
-              style: TextStyle(
-                color:      settings.textColor,
-                fontSize:   13,
-                fontWeight: FontWeight.bold,
-              ),
+              title,
+              style: textTheme.labelMedium?.copyWith(color: settings.secondaryTextColor),
               textAlign: TextAlign.center,
-              maxLines:  2,
-              overflow:  TextOverflow.ellipsis,
             ),
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                body,
+                style: textTheme.titleSmall?.copyWith(
+                  color: settings.textColor,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -504,11 +502,12 @@ class _WaveAnimationState extends State<WaveAnimation>
   Widget build(BuildContext context) {
     return SizedBox(
       height: 28,
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder:   (_, __) => CustomPaint(
-          painter: _WavePainter(offset: _ctrl.value),
-          size:    Size.infinite,
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _WavePainter(repaint: _ctrl),
+          size: Size.infinite,
+          isComplex: false,
+          willChange: true,
         ),
       ),
     );
@@ -516,8 +515,10 @@ class _WaveAnimationState extends State<WaveAnimation>
 }
 
 class _WavePainter extends CustomPainter {
-  final double offset;
-  _WavePainter({required this.offset});
+  final Animation<double> _repaint;
+  _WavePainter({required Animation<double> repaint})
+      : _repaint = repaint,
+        super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -530,9 +531,13 @@ class _WavePainter extends CustomPainter {
     final path = Path();
     const amplitude = 7.0;
     const waveLength = 60.0; // px между пиками
+    final offset = _repaint.value;
 
     path.moveTo(0, size.height / 2);
-    for (double x = 0; x <= size.width; x++) {
+    // PERF: avoid per-pixel path segments (CPU/GPU heavy on desktop).
+    // Keep roughly ~240 segments independent of window width.
+    final step = (size.width / 240).clamp(2.0, 8.0);
+    for (double x = 0; x <= size.width; x += step) {
       final y = amplitude *
           sin(2 * pi * (x / waveLength - offset)) +
           size.height / 2;
@@ -542,5 +547,5 @@ class _WavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_WavePainter old) => old.offset != offset;
+  bool shouldRepaint(_WavePainter oldDelegate) => false;
 }

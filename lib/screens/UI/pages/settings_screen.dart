@@ -105,8 +105,7 @@ class _SettingsViewState extends State<SettingsView> {
                           onPressed: _savePort,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: s.primaryColor,
-                            foregroundColor: Colors.white,
-                            elevation:       0,
+                            elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           ),
@@ -217,28 +216,37 @@ class _SettingsViewState extends State<SettingsView> {
                         if (themeManager.hasCustomBackground) ...[
                           Divider(height: 24, color: s.borderColor),
                           // Превью фона
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Stack(
-                              children: [
-                                Image.file(
-                                  File(themeManager.settings.backgroundImagePath!),
-                                  height: 180,
-                                  width:  double.infinity,
-                                  fit:    BoxFit.cover,
-                                ),
-                                Positioned(
-                                  top: 8, right: 8,
-                                  child: IconButton(
-                                    icon:  const Icon(Icons.close, color: Colors.white),
-                                    style: IconButton.styleFrom(backgroundColor: Colors.black54),
-                                    onPressed: () async {
-                                      await themeManager.removeBackground();
-                                      widget.onThemeChanged?.call();
-                                    },
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 560),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Image.file(
+                                        File(themeManager.settings.backgroundImagePath!),
+                                        fit: BoxFit.cover,
+                                        alignment: Alignment.center,
+                                      ),
+                                      Positioned(
+                                        top: 8,
+                                        right: 8,
+                                        child: IconButton(
+                                          icon: const Icon(Icons.close, color: Colors.white),
+                                          style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                                          onPressed: () async {
+                                            await themeManager.removeBackground();
+                                            widget.onThemeChanged?.call();
+                                          },
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -509,17 +517,64 @@ class _SubPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = settings;
+    final themeManager = ThemeManager();
     return Scaffold(
-      backgroundColor: s.backgroundColor,
+      backgroundColor: themeManager.hasCustomBackground ? Colors.transparent : s.backgroundColor,
       appBar: AppBar(
-        backgroundColor: s.sidebarColor,
-        foregroundColor: s.textColor,
-        elevation:       0,
-        title: Text(title, style: TextStyle(color: s.textColor, fontWeight: FontWeight.w600, fontSize: 17)),
-        iconTheme: IconThemeData(color: s.primaryColor),
-        surfaceTintColor: Colors.transparent,
+        title: Text(title),
       ),
-      body: child,
+      body: themeManager.hasCustomBackground
+          ? Stack(
+              children: [
+                const Positioned.fill(child: _GlassBackground()),
+                child,
+              ],
+            )
+          : child,
+    );
+  }
+}
+
+class _GlassBackground extends StatelessWidget {
+  const _GlassBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    final tm = ThemeManager();
+    final s = tm.settings;
+    final path = s.backgroundImagePath;
+    if (path == null) return const SizedBox.shrink();
+
+    final mq = MediaQuery.of(context);
+    final provider = ResizeImage(
+      FileImage(File(path)),
+      width: (mq.size.width * mq.devicePixelRatio).round(),
+      height: (mq.size.height * mq.devicePixelRatio).round(),
+    );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image(
+          image: provider,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) {
+            Future.microtask(() => tm.removeBackground());
+            return Container(color: s.backgroundColor);
+          },
+        ),
+        BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: s.blurIntensity,
+            sigmaY: s.blurIntensity,
+          ),
+          child: Container(
+            color: Colors.black.withAlpha(
+              ((1.0 - s.backgroundOpacity) * 255).round().clamp(0, 255),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
