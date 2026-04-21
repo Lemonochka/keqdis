@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
+import 'package:keqdis/localization/app_localization.dart';
 
 class ServerSearchBar extends StatelessWidget {
   final TextEditingController controller;
@@ -31,7 +32,7 @@ class ServerSearchBar extends StatelessWidget {
           fontSize: 14,
         ),
         decoration: InputDecoration(
-          hintText:  'Поиск серверов...',
+          hintText:  context.tr('search_servers_hint'),
           hintStyle: TextStyle(
             color:    s.secondaryTextColor.withOpacity(0.5),
             fontSize: 14,

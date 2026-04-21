@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/ping_service.dart';
 import '../storages/unified_storage.dart';
+import '../storages/improved_settings_storage.dart';
 
 class PingManager extends ChangeNotifier {
   final Map<String, PingResult> _pingResults = {};
@@ -16,7 +17,13 @@ class PingManager extends ChangeNotifier {
 
     try {
       final type = PingType.values.firstWhere((e) => e.name == pingType);
-      final result = await PingService.ping(server.config, type);
+      // Use current local port for proxy ping instead of hard-coded 2080.
+      final settings = await SettingsStorage.loadSettings();
+      final result = await PingService.ping(
+        server.config,
+        type,
+        proxyPort: settings.localPort,
+      );
       _pingResults[key] = result;
       notifyListeners();
     } catch (e) {

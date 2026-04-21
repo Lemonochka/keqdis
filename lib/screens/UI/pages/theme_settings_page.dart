@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import '../widgets/custom_notification.dart';
+import 'package:keqdis/localization/app_localization.dart';
 
 class ThemeSettingsPage extends StatefulWidget {
   final VoidCallback? onThemeChanged;
@@ -54,7 +55,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
       if (mounted) {
         CustomNotification.show(
           context,
-          message: 'Обработка изображения...',
+          message: AppLocalization().t('processing_image'),
           type: NotificationType.info,
         );
       }
@@ -71,7 +72,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
       if (mounted) {
         CustomNotification.show(
           context,
-          message: 'Фон установлен (оптимизировано для производительности)',
+          message: AppLocalization().t('background_set_optimized'),
           type: NotificationType.success,
         );
       }
@@ -79,7 +80,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
       if (mounted) {
         CustomNotification.show(
           context,
-          message: 'Ошибка: $e',
+          message: AppLocalization().t('background_error').replaceFirst('{error}', '$e'),
           type: NotificationType.error,
         );
       }
@@ -96,7 +97,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     if (mounted) {
       CustomNotification.show(
         context,
-        message: 'Фон удален',
+        message: AppLocalization().t('background_removed'),
         type: NotificationType.success,
       );
     }
@@ -136,7 +137,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
     final pickedColor = await showColorPickerDialog(
       context,
       currentColor,
-      title: const Text('Выберите цвет'),
+      title: Text(AppLocalization().t('pick_color_title')),
       pickersEnabled: const {
         ColorPickerType.wheel: true,
         ColorPickerType.accent: false,
@@ -177,6 +178,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   }
 
   Widget _buildContent() {
+    final s = _themeManager.settings;
     return Scaffold(
       body: Stack(
         children: [
@@ -188,14 +190,19 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
           Column(
             children: [
               AppBar(
-                title: const Text('Настройки темы'),
+                backgroundColor: _themeManager.hasCustomBackground
+                    ? (s.isDarkMode ? const Color(0xFF141010) : const Color(0xFFF5E6EA))
+                    : null,
+                surfaceTintColor: Colors.transparent,
+                foregroundColor: s.textColor,
+                title: Text(AppLocalization().t('theme_settings_title')),
               ),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
                     Text(
-                      'Фоновое изображение',
+                      AppLocalization().t('background_image_title'),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -214,13 +221,13 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                 children: [
                                   const Icon(Icons.check_circle, color: Colors.green),
                                   const SizedBox(width: 12),
-                                  const Expanded(
-                                    child: Text('Фон установлен'),
+                                  Expanded(
+                                    child: Text(AppLocalization().t('background_set')),
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.delete, color: Colors.red),
                                     onPressed: _removeBackground,
-                                    tooltip: 'Удалить фон',
+                                    tooltip: AppLocalization().t('background_delete'),
                                   ),
                                 ],
                               ),
@@ -246,7 +253,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'Изображение оптимизировано до Full HD для лучшей производительности',
+                                        AppLocalization().t('background_optimized_hint'),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.blue[200],
@@ -262,9 +269,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'Прозрачность',
-                                    style: TextStyle(fontSize: 14),
+                                  Text(
+                                    AppLocalization().t('background_transparency'),
+                                    style: const TextStyle(fontSize: 14),
                                   ),
                                   Text(
                                     '${(_opacity * 100).round()}%',
@@ -297,9 +304,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'Размытие',
-                                    style: TextStyle(fontSize: 14),
+                                  Text(
+                                    AppLocalization().t('background_blur_label'),
+                                    style: const TextStyle(fontSize: 14),
                                   ),
                                   Text(
                                     _blur.round().toString(),
@@ -330,10 +337,10 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                             ] else ...[
                               SizedBox(
                                 width: double.infinity,
-                                child: ElevatedButton.icon(
+                                  child: ElevatedButton.icon(
                                   onPressed: _pickImage,
                                   icon: const Icon(Icons.image),
-                                  label: const Text('Выбрать изображение'),
+                                  label: Text(AppLocalization().t('background_pick_image')),
                                   style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
                                 ),
                               ),
@@ -359,7 +366,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'Любое изображение будет автоматически оптимизировано до Full HD (1920x1080) для лучшей производительности',
+                                        AppLocalization().t('background_any_image_hint'),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.orange[200],
@@ -379,7 +386,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
                     // Цвета
                     Text(
-                      'Цветовая схема',
+                      AppLocalization().t('color_scheme'),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -389,21 +396,21 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
                     const SizedBox(height: 16),
 
                     _buildColorCard(
-                      'Основной цвет',
+                      AppLocalization().t('primary_color'),
                       _themeManager.settings.primaryColor,
                           () => _pickColor('primary'),
                     ),
                     const SizedBox(height: 12),
 
                     _buildColorCard(
-                      'Вторичный цвет',
+                      AppLocalization().t('secondary_color'),
                       _themeManager.settings.secondaryColor,
                           () => _pickColor('secondary'),
                     ),
                     const SizedBox(height: 12),
 
                     _buildColorCard(
-                      'Цвет фона карточек',
+                      AppLocalization().t('card_background_color'),
                       _themeManager.settings.accentColor,
                           () => _pickColor('accent'),
                     ),

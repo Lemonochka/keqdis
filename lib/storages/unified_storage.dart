@@ -3,18 +3,24 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
+import '../utils/security_hardening.dart';
 
 class PortableStorage {
   static String? _portableDir;
 
   static bool _isValidFilename(String filename) {
-    if (filename.contains('..') || filename.contains('/') || filename.contains('\\')) {
+    if (filename.contains('..') ||
+        filename.contains('/') ||
+        filename.contains('\\')) {
       return false;
     }
     if (path.isAbsolute(filename)) {
       return false;
     }
-    if (filename.contains(':') || filename.contains('|') || filename.contains('<') || filename.contains('>')) {
+    if (filename.contains(':') ||
+        filename.contains('|') ||
+        filename.contains('<') ||
+        filename.contains('>')) {
       return false;
     }
     final validPattern = RegExp(r'^[a-zA-Z0-9._-]+$');
@@ -45,7 +51,9 @@ class PortableStorage {
       throw ArgumentError('Недопустимое имя файла: $filename');
     }
     if (_portableDir == null) {
-      throw StateError('Portable directory not initialized. Call getPortableDirectory() first.');
+      throw StateError(
+        'Portable directory not initialized. Call getPortableDirectory() first.',
+      );
     }
     return path.join(_portableDir!, filename);
   }
@@ -90,19 +98,19 @@ class ServerItem {
       id: json['id'] as String,
       config: json['config'] as String,
       type: ServerItemType.values.firstWhere(
-            (e) => e.name == json['type'],
+        (e) => e.name == json['type'],
         orElse: () => ServerItemType.manual,
       ),
       subscriptionId: json['subscriptionId'] as String?,
       subscriptionName: json['subscriptionName'] as String?,
-      addedAt: json['addedAt'] != null ? DateTime.parse(json['addedAt']) : DateTime.now(),
+      addedAt: json['addedAt'] != null
+          ? DateTime.parse(json['addedAt'])
+          : DateTime.now(),
       isFavorite: json['isFavorite'] as bool? ?? false,
     );
   }
 
-  ServerItem copyWith({
-    bool? isFavorite,
-  }) {
+  ServerItem copyWith({bool? isFavorite}) {
     return ServerItem(
       id: id,
       config: config,
@@ -112,6 +120,36 @@ class ServerItem {
       addedAt: addedAt,
       isFavorite: isFavorite ?? this.isFavorite,
     );
+  }
+
+  String get stableKey {
+    try {
+      final uri = Uri.parse(config);
+      final host = uri.host.toLowerCase();
+      final port = uri.port.toString();
+
+      if (config.startsWith('vmess://')) {
+        try {
+          final payload = config.substring('vmess://'.length).trim();
+          final normalized = base64.normalize(payload);
+          final decoded = utf8.decode(base64.decode(normalized));
+          final json = jsonDecode(decoded) as Map<String, dynamic>;
+          final id = (json['id'] as String? ?? '').toLowerCase();
+          final add = (json['add'] as String? ?? '').toLowerCase();
+          final portJ = json['port']?.toString() ?? port;
+          return 'vmess:$id@$add:$portJ';
+        } catch (_) {
+          return 'vmess:@$host:$port';
+        }
+      }
+
+      final userInfo = uri.userInfo.toLowerCase();
+      return '${uri.scheme}:$userInfo@$host:$port';
+    } catch (_) {
+      final noFragment = config.split('#').first;
+      final end = noFragment.length > 80 ? 80 : noFragment.length;
+      return noFragment.substring(0, end);
+    }
   }
 
   String get displayName {
@@ -137,6 +175,10 @@ class Subscription {
   final DateTime lastUpdated;
   final bool autoUpdate;
   final int serverCount;
+  final int? trafficUploadBytes;
+  final int? trafficDownloadBytes;
+  final int? trafficTotalBytes;
+  final DateTime? expiresAt;
 
   Subscription({
     required this.id,
@@ -145,6 +187,10 @@ class Subscription {
     required this.lastUpdated,
     this.autoUpdate = true,
     this.serverCount = 0,
+    this.trafficUploadBytes,
+    this.trafficDownloadBytes,
+    this.trafficTotalBytes,
+    this.expiresAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -154,6 +200,10 @@ class Subscription {
     'lastUpdated': lastUpdated.toIso8601String(),
     'autoUpdate': autoUpdate,
     'serverCount': serverCount,
+    'trafficUploadBytes': trafficUploadBytes,
+    'trafficDownloadBytes': trafficDownloadBytes,
+    'trafficTotalBytes': trafficTotalBytes,
+    'expiresAt': expiresAt?.toIso8601String(),
   };
 
   factory Subscription.fromJson(Map<String, dynamic> json) {
@@ -164,6 +214,12 @@ class Subscription {
       lastUpdated: DateTime.parse(json['lastUpdated'] as String),
       autoUpdate: json['autoUpdate'] as bool? ?? true,
       serverCount: json['serverCount'] as int? ?? 0,
+      trafficUploadBytes: json['trafficUploadBytes'] as int?,
+      trafficDownloadBytes: json['trafficDownloadBytes'] as int?,
+      trafficTotalBytes: json['trafficTotalBytes'] as int?,
+      expiresAt: json['expiresAt'] is String
+          ? DateTime.tryParse(json['expiresAt'] as String)
+          : null,
     );
   }
 
@@ -173,6 +229,10 @@ class Subscription {
     DateTime? lastUpdated,
     bool? autoUpdate,
     int? serverCount,
+    int? trafficUploadBytes,
+    int? trafficDownloadBytes,
+    int? trafficTotalBytes,
+    DateTime? expiresAt,
   }) {
     return Subscription(
       id: id,
@@ -181,6 +241,10 @@ class Subscription {
       lastUpdated: lastUpdated ?? this.lastUpdated,
       autoUpdate: autoUpdate ?? this.autoUpdate,
       serverCount: serverCount ?? this.serverCount,
+      trafficUploadBytes: trafficUploadBytes ?? this.trafficUploadBytes,
+      trafficDownloadBytes: trafficDownloadBytes ?? this.trafficDownloadBytes,
+      trafficTotalBytes: trafficTotalBytes ?? this.trafficTotalBytes,
+      expiresAt: expiresAt ?? this.expiresAt,
     );
   }
 }
@@ -225,11 +289,16 @@ class UnifiedStorage {
 
   static Future<void> _loadAllFromDisk() async {
     _servers = await _loadGenericList(_serversFile, ServerItem.fromJson);
-    _subscriptions = await _loadGenericList(_subscriptionsFile, Subscription.fromJson);
+    _subscriptions = await _loadGenericList(
+      _subscriptionsFile,
+      Subscription.fromJson,
+    );
   }
 
   static Future<List<T>> _loadGenericList<T>(
-      String fileName, T Function(Map<String, dynamic>) fromJson) async {
+    String fileName,
+    T Function(Map<String, dynamic>) fromJson,
+  ) async {
     try {
       final filePath = PortableStorage.getFilePath(fileName);
       final file = File(filePath);
@@ -239,7 +308,9 @@ class UnifiedStorage {
       final content = await file.readAsString();
       if (content.isEmpty) return [];
       final List<dynamic> jsonList = json.decode(content);
-      return jsonList.map((json) => fromJson(json as Map<String, dynamic>)).toList();
+      return jsonList
+          .map((json) => fromJson(json as Map<String, dynamic>))
+          .toList();
     } catch (e, s) {
       debugPrint('Failed to load $fileName: $e\n$s');
       return [];
@@ -254,12 +325,17 @@ class UnifiedStorage {
     await _saveGenericList(_subscriptionsFile, _subscriptions);
   }
 
-  static Future<void> _saveGenericList<T extends dynamic>(String fileName, List<T> list) async {
+  static Future<void> _saveGenericList<T extends dynamic>(
+    String fileName,
+    List<T> list,
+  ) async {
     try {
       final filePath = PortableStorage.getFilePath(fileName);
-      final file = File(filePath);
       final jsonList = list.map((item) => item.toJson()).toList();
-      await file.writeAsString(json.encode(jsonList));
+      await SecurityHardening.writeStringAtomically(
+        filePath,
+        json.encode(jsonList),
+      );
     } catch (e, s) {
       debugPrint('Failed to save $fileName: $e\n$s');
     }
@@ -325,7 +401,7 @@ class UnifiedStorage {
       if (serverId == null) {
         if (await file.exists()) await file.delete();
       } else {
-        await file.writeAsString(serverId);
+        await SecurityHardening.writeStringAtomically(filePath, serverId);
       }
     } catch (e) {
       debugPrint('Failed to save last server ID: $e');
@@ -344,8 +420,11 @@ class UnifiedStorage {
     }
   }
 
-  static Future<Subscription> addSubscription(
-      {required String name, required String url, bool autoUpdate = true}) async {
+  static Future<Subscription> addSubscription({
+    required String name,
+    required String url,
+    bool autoUpdate = true,
+  }) async {
     return _withLock(() async {
       await _ensureInitialized();
       if (_subscriptions.any((sub) => sub.url == url)) {
@@ -375,10 +454,14 @@ class UnifiedStorage {
     });
   }
 
-  static Future<Subscription> updateSubscription(Subscription subscription) async {
+  static Future<Subscription> updateSubscription(
+    Subscription subscription,
+  ) async {
     return _withLock(() async {
       await _ensureInitialized();
-      final index = _subscriptions.indexWhere((sub) => sub.id == subscription.id);
+      final index = _subscriptions.indexWhere(
+        (sub) => sub.id == subscription.id,
+      );
       if (index != -1) {
         _subscriptions[index] = subscription;
         await _saveSubscriptions();
@@ -389,21 +472,85 @@ class UnifiedStorage {
     });
   }
 
-  static Future<void> updateSubscriptionServers(
-      {required String subscriptionId,
-        required String subscriptionName,
-        required List<String> newConfigs}) async {
+  static Future<void> reorderSubscriptions(List<String> orderedIds) async {
     return _withLock(() async {
       await _ensureInitialized();
+      if (_subscriptions.isEmpty) return;
+
+      final orderMap = <String, int>{
+        for (int i = 0; i < orderedIds.length; i++) orderedIds[i]: i,
+      };
+
+      _subscriptions.sort((a, b) {
+        final ai = orderMap[a.id] ?? 1 << 20;
+        final bi = orderMap[b.id] ?? 1 << 20;
+        return ai.compareTo(bi);
+      });
+
+      await _saveSubscriptions();
+    });
+  }
+
+  static Future<void> updateSubscriptionServers({
+    required String subscriptionId,
+    required String subscriptionName,
+    required List<String> newConfigs,
+  }) async {
+    return _withLock(() async {
+      await _ensureInitialized();
+      final oldServers =
+          _servers.where((s) => s.subscriptionId == subscriptionId).toList();
+      final oldByStable = <String, ServerItem>{
+        for (final s in oldServers) s.stableKey: s,
+      };
+
       _servers.removeWhere((s) => s.subscriptionId == subscriptionId);
       int timestamp = DateTime.now().millisecondsSinceEpoch;
-      final newServers = newConfigs.map((config) => ServerItem(
-        id: '${timestamp++}',
-        config: config,
-        type: ServerItemType.subscription,
-        subscriptionId: subscriptionId,
-        subscriptionName: subscriptionName,
-      ));
+      final newServers = newConfigs.map((config) {
+        final exactMatch = oldServers.cast<ServerItem?>().firstWhere(
+          (s) => s?.config == config,
+          orElse: () => null,
+        );
+        if (exactMatch != null) {
+          return ServerItem(
+            id: exactMatch.id,
+            config: config,
+            type: ServerItemType.subscription,
+            subscriptionId: subscriptionId,
+            subscriptionName: subscriptionName,
+            addedAt: exactMatch.addedAt,
+            isFavorite: exactMatch.isFavorite,
+          );
+        }
+
+        final temp = ServerItem(
+          id: 'tmp',
+          config: config,
+          type: ServerItemType.subscription,
+          subscriptionId: subscriptionId,
+          subscriptionName: subscriptionName,
+        );
+        final stableMatch = oldByStable[temp.stableKey];
+        if (stableMatch != null) {
+          return ServerItem(
+            id: stableMatch.id,
+            config: config,
+            type: ServerItemType.subscription,
+            subscriptionId: subscriptionId,
+            subscriptionName: subscriptionName,
+            addedAt: stableMatch.addedAt,
+            isFavorite: stableMatch.isFavorite,
+          );
+        }
+
+        return ServerItem(
+          id: '${timestamp++}',
+          config: config,
+          type: ServerItemType.subscription,
+          subscriptionId: subscriptionId,
+          subscriptionName: subscriptionName,
+        );
+      });
       _servers.addAll(newServers);
       await _saveServers();
     });

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import '../utils/security_hardening.dart';
 
 class VpnService {
   Process? _process;
@@ -180,8 +181,7 @@ class VpnService {
       throw ArgumentError('Некорректный JSON конфиг: $e');
     }
 
-    final configFile = File(configPath);
-    await configFile.writeAsString(configJson);
+    await SecurityHardening.writeStringAtomically(configPath, configJson);
     debugPrint('VpnService: Config written to $configPath');
 
     await _prepareAssets();
@@ -219,14 +219,17 @@ class VpnService {
       // FIX: Сохраняем подписки для последующей отмены
       _stdoutSub = _process?.stdout.transform(utf8.decoder).listen((log) {
         if (kDebugMode) {
-          debugPrint('[$executableName] $log');
+          debugPrint('[$executableName] ${SecurityHardening.sanitizeSensitiveText(log)}');
         }
       });
 
       _stderrSub = _process?.stderr.transform(utf8.decoder).listen((err) {
-        debugPrint('[$executableName ERROR] $err');
+        final sanitizedError = SecurityHardening.sanitizeSensitiveText(err);
+        debugPrint('[$executableName ERROR] $sanitizedError');
 
-        if (err.contains('Failed') || err.contains('panic') || err.contains('FATAL')) {
+        if (sanitizedError.contains('Failed') ||
+            sanitizedError.contains('panic') ||
+            sanitizedError.contains('FATAL')) {
           debugPrint('VpnService: Critical error detected, marking as not running');
           _isRunning = false;
           // FIX: Оповещаем CoreManager

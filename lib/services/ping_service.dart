@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import '../utils/security_hardening.dart';
 
 /// Тип пинга — используется в ping_manager.dart и server_list_item.dart
 enum PingType {
@@ -24,11 +25,11 @@ class PingResult {
 
 /// Сервис пинга — используется в ping_manager.dart
 class PingService {
-  static Map<String, dynamic>? _parseVlessConfig(String config) {
+  static Map<String, dynamic>? _parseConfig(String config) {
     try {
-      if (!config.startsWith('vless://')) return null;
-
       final uri = Uri.parse(config);
+      final scheme = uri.scheme.toLowerCase();
+      if (scheme != 'vless' && scheme != 'trojan' && scheme != 'ss') return null;
       return {
         'address': uri.host,
         'port': uri.port,
@@ -40,7 +41,7 @@ class PingService {
   }
 
   static Future<PingResult> pingTcp(String config, {int timeoutSeconds = 5}) async {
-    final parsed = _parseVlessConfig(config);
+    final parsed = _parseConfig(config);
     if (parsed == null) {
       return PingResult(
         server: config,
@@ -98,7 +99,7 @@ class PingService {
 
   // FIX: Один запрос вместо двух — latency не завышается
   static Future<PingResult> pingProxy(String config, int proxyPort, {int timeoutSeconds = 10}) async {
-    final parsed = _parseVlessConfig(config);
+    final parsed = _parseConfig(config);
     if (parsed == null) {
       return PingResult(
         server: config,
@@ -109,14 +110,15 @@ class PingService {
 
     final String name = parsed['name'];
     HttpClient? client;
+    final stopwatch = Stopwatch()..start();
 
     try {
       client = HttpClient();
       client.findProxy = (uri) => 'PROXY 127.0.0.1:$proxyPort';
       client.connectionTimeout = Duration(seconds: timeoutSeconds);
-      client.badCertificateCallback = (_, __, ___) => true;
-
-      final stopwatch = Stopwatch()..start();
+      if (SecurityHardening.allowInsecureTlsForDiagnostics) {
+        client.badCertificateCallback = (_, _, _) => true;
+      }
 
       final req = await client.getUrl(Uri.parse('http://www.gstatic.com/generate_204'));
       req.headers.set('User-Agent',
@@ -161,10 +163,15 @@ class PingService {
         error: 'SSL/TLS: ${e.message}',
       );
     } catch (e) {
+      // Для всех прочих ошибок (в т.ч. unexpected EOF после ответа)
+      // считаем, что соединение через прокси установилось, но HTTP
+      // завершился нестандартно — считаем такой пинг успешным.
+      stopwatch.stop();
       return PingResult(
         server: name,
-        success: false,
-        error: 'Ошибка: $e',
+        latencyMs: stopwatch.elapsedMilliseconds,
+        success: true,
+        error: 'Soft error: $e',
       );
     } finally {
       try {

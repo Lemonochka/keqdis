@@ -24,6 +24,14 @@ class ConfigGeneratorV2 {
     });
   }
 
+  static String _decodeBase64UrlCompat(String input) {
+    var normalized = input.trim().replaceAll('-', '+').replaceAll('_', '/');
+    while (normalized.length % 4 != 0) {
+      normalized += '=';
+    }
+    return utf8.decode(base64.decode(normalized));
+  }
+
   static Map<String, dynamic> _generateConfigMap(
       String input,
       AppSettings settings,
@@ -39,63 +47,132 @@ class ConfigGeneratorV2 {
       throw ArgumentError('Невалидный URI: $e');
     }
 
-    final uuid = uri.userInfo;
+    final scheme = uri.scheme.toLowerCase();
     final address = uri.host;
     final port = uri.port;
-
-    if (uuid.isEmpty) {
-      throw ArgumentError('UUID (userInfo) отсутствует в URI. Проверьте формат ссылки.');
-    }
 
     String getParam(String key, [String def = '']) {
       final val = uri.queryParametersAll[key];
       return (val != null && val.isNotEmpty) ? val.first : def;
     }
 
-    final flow = getParam('flow');
     final networkType = getParam('type', 'tcp');
-    final security = getParam('security', 'none');
-    final vlessEncryption = (() {
-      final enc = getParam('encryption', 'none').trim();
-      return enc.isEmpty ? 'none' : enc;
-    })();
+    final security = getParam('security', scheme == 'trojan' ? 'tls' : 'none');
+    final outbound = <String, dynamic>{"tag": "proxy"};
 
-    if (flow == 'xtls-rprx-vision' && networkType != 'tcp' && networkType != 'xhttp') {
-      throw ArgumentError(
-          'Flow "xtls-rprx-vision" совместим только с транспортом tcp или xhttp, '
-              'но указан "$networkType"'
-      );
-    }
-
-    final outbound = <String, dynamic>{
-      "protocol": "vless",
-      "tag": "proxy",
-      "settings": {
-        "vnext": [
-          {
-            "address": address,
-            "port": port,
-            "users": [
-              {"id": uuid, "encryption": vlessEncryption, "flow": flow}
-            ]
-          }
-        ]
-      },
-      "streamSettings": <String, dynamic>{
-        "network": networkType,
-        "security": security,
+    if (scheme == 'vless') {
+      final uuid = uri.userInfo;
+      if (uuid.isEmpty) {
+        throw ArgumentError('UUID (userInfo) отсутствует в URI. Проверьте формат ссылки.');
       }
-    };
+
+      final flow = getParam('flow');
+      final vlessEncryption = (() {
+        final enc = getParam('encryption', 'none').trim();
+        return enc.isEmpty ? 'none' : enc;
+      })();
+
+      if (flow == 'xtls-rprx-vision' && networkType != 'tcp' && networkType != 'xhttp') {
+        throw ArgumentError(
+            'Flow "xtls-rprx-vision" совместим только с транспортом tcp или xhttp, '
+                'но указан "$networkType"'
+        );
+      }
+
+      outbound.addAll({
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": address,
+              "port": port,
+              "users": [
+                {"id": uuid, "encryption": vlessEncryption, "flow": flow}
+              ]
+            }
+          ]
+        },
+        "streamSettings": <String, dynamic>{
+          "network": networkType,
+          "security": security,
+        }
+      });
+    } else if (scheme == 'trojan') {
+      final password = uri.userInfo;
+      if (password.isEmpty) {
+        throw ArgumentError('Для Trojan требуется пароль в userInfo.');
+      }
+      outbound.addAll({
+        "protocol": "trojan",
+        "settings": {
+          "servers": [
+            {
+              "address": address,
+              "port": port,
+              "password": password,
+            }
+          ]
+        },
+        "streamSettings": <String, dynamic>{
+          "network": networkType,
+          "security": security,
+        }
+      });
+    } else if (scheme == 'ss') {
+      // ss://method:password@host:port?plugin=...#name
+      // and ss://BASE64(method:password)@host:port#name are both supported.
+      final userInfo = uri.userInfo;
+      if (userInfo.isEmpty) {
+        throw ArgumentError('Для Shadowsocks требуется userInfo с методом и паролем.');
+      }
+      String method = '';
+      String password = '';
+      if (userInfo.contains(':')) {
+        final splitIdx = userInfo.indexOf(':');
+        method = userInfo.substring(0, splitIdx);
+        password = userInfo.substring(splitIdx + 1);
+      } else {
+        final decoded = _decodeBase64UrlCompat(userInfo);
+        final splitIdx = decoded.indexOf(':');
+        if (splitIdx <= 0 || splitIdx >= decoded.length - 1) {
+          throw ArgumentError('Некорректный Shadowsocks userInfo.');
+        }
+        method = decoded.substring(0, splitIdx);
+        password = decoded.substring(splitIdx + 1);
+      }
+
+      if (method.isEmpty || password.isEmpty) {
+        throw ArgumentError('Shadowsocks требует method и password.');
+      }
+
+      outbound.addAll({
+        "protocol": "shadowsocks",
+        "settings": {
+          "servers": [
+            {
+              "address": address,
+              "port": port,
+              "method": method,
+              "password": password,
+            }
+          ]
+        }
+      });
+    } else {
+      throw ArgumentError('Протокол "$scheme" пока не поддерживается.');
+    }
 
     if (mode == VpnMode.tun && adapterIp.isNotEmpty) {
       outbound['sendThrough'] = adapterIp;
-      (outbound['streamSettings'] as Map<String, dynamic>)['sockopt'] = {"tcpFastOpen": true};
+      if (outbound['streamSettings'] is Map<String, dynamic>) {
+        (outbound['streamSettings'] as Map<String, dynamic>)['sockopt'] = {"tcpFastOpen": true};
+      }
     }
 
-    final stream = outbound['streamSettings'] as Map<String, dynamic>;
+    final stream = outbound['streamSettings'] as Map<String, dynamic>?;
     final sni = getParam('sni', getParam('host', address));
 
-    if (security == 'tls') {
+    if (stream != null && security == 'tls') {
       // Xray-core v26.2.6+ removed "allowInsecure".
       // Use:
       // - pinnedPeerCertSha256 (share param: pcs)
@@ -127,7 +204,7 @@ class ConfigGeneratorV2 {
               .where((e) => e.isNotEmpty)
               .toList(),
       };
-    } else if (security == 'reality') {
+    } else if (stream != null && security == 'reality') {
       final publicKey = getParam('pbk');
       final shortId = getParam('sid');
 
@@ -145,31 +222,31 @@ class ConfigGeneratorV2 {
       };
     }
 
-    if (networkType == 'tcp' && getParam('headerType') == 'http') {
+    if (stream != null && networkType == 'tcp' && getParam('headerType') == 'http') {
       stream['tcpSettings'] = {
         "header": {
           "type": "http",
           "request": {"headers": {"Host": [getParam('host', address)]}}
         }
       };
-    } else if (networkType == 'ws') {
+    } else if (stream != null && networkType == 'ws') {
       stream['wsSettings'] = {
         "path": getParam('path', '/'),
         "headers": {"Host": getParam('host', sni)}
       };
-    } else if (networkType == 'grpc') {
+    } else if (stream != null && networkType == 'grpc') {
       stream['grpcSettings'] = {
         "serviceName": getParam('serviceName'),
         "multiMode": getParam('mode') == 'multi'
       };
-    } else if (networkType == 'xhttp' || networkType == 'splithttp') {
+    } else if (stream != null && (networkType == 'xhttp' || networkType == 'splithttp')) {
       final xhttpSettings = <String, dynamic>{"path": getParam('path', '/')};
       final host = getParam('host');
       xhttpSettings['host'] = host.isNotEmpty ? host : sni;
       final xhttpMode = getParam('mode');
       if (xhttpMode.isNotEmpty) xhttpSettings['mode'] = xhttpMode;
       stream['xhttpSettings'] = xhttpSettings;
-    } else if (networkType == 'httpupgrade') {
+    } else if (stream != null && networkType == 'httpupgrade') {
       stream['httpupgradeSettings'] = {
         "path": getParam('path', '/'),
         "host": getParam('host', sni),
@@ -464,7 +541,7 @@ class SingBoxChainGen {
           "tag": "tun-in",
           "interface_name": "tun-keqdis",
           "address": ["172.19.0.1/30"],
-          "mtu": 1400,
+          "mtu": 1500,
           "auto_route": true,
           "strict_route": true,
           "stack": "mixed",

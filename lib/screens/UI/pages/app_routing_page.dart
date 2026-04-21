@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
+import 'package:keqdis/localization/app_localization.dart';
 import 'package:keqdis/services/installed_apps_service.dart';
 import 'package:keqdis/storages/app_routing_storage.dart';
 
@@ -158,9 +159,15 @@ class _AppRoutingPageState extends State<AppRoutingPage>
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(milliseconds: 500), () async {
       await _save();
-      if (mounted) CustomNotification.show(context,
-          message: 'Сохранено: ${_vpnApps.length} приложений',
-          type: NotificationType.success);
+      if (mounted) {
+        CustomNotification.show(
+          context,
+          message: AppLocalization()
+              .t('apps_saved_count')
+              .replaceFirst('{count}', '${_vpnApps.length}'),
+          type: NotificationType.success,
+        );
+      }
     });
   }
 
@@ -170,8 +177,26 @@ class _AppRoutingPageState extends State<AppRoutingPage>
       if (widget.isVpnConnected) _pendingRestart = true;
     });
     await _save();
-    if (mounted) CustomNotification.show(context,
-        message: 'Режим: ${mode.label}', type: NotificationType.success);
+    if (mounted) {
+      CustomNotification.show(
+        context,
+        message: AppLocalization()
+            .t('apps_routing_mode_changed')
+            .replaceFirst('{mode}', _modeLabel(mode)),
+        type: NotificationType.success,
+      );
+    }
+  }
+
+  String _modeLabel(AppRoutingMode mode) {
+    switch (mode) {
+      case AppRoutingMode.allProxy:
+        return AppLocalization().t('apps_routing_mode_all_proxy');
+      case AppRoutingMode.onlySelected:
+        return AppLocalization().t('apps_routing_mode_only_selected');
+      case AppRoutingMode.allExceptSelected:
+        return AppLocalization().t('apps_routing_mode_all_except_selected');
+    }
   }
 
   void _clearAll() {
@@ -180,8 +205,11 @@ class _AppRoutingPageState extends State<AppRoutingPage>
       if (widget.isVpnConnected) _pendingRestart = true;
     });
     _save();
-    CustomNotification.show(context,
-        message: 'Список очищен', type: NotificationType.success);
+    CustomNotification.show(
+      context,
+      message: AppLocalization().t('apps_list_cleared'),
+      type: NotificationType.success,
+    );
   }
 
   @override
@@ -194,7 +222,13 @@ class _AppRoutingPageState extends State<AppRoutingPage>
     final text = s.textColor;
     final subtext = s.secondaryTextColor;
 
-    return Column(children: [
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.hasCustomBackground
+            ? s.cardColor.withOpacity(0.20)
+            : Colors.transparent,
+      ),
+      child: Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: _ModeSelector(current: _routingMode, onChanged: _setMode,
@@ -231,7 +265,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
             const SizedBox(width: 8),
             Expanded(
                 child: Text(
-                  'Работает только в TUN-режиме',
+                  AppLocalization().t('apps_routing_tun_only_banner'),
                   style: TextStyle(
                       fontSize: 11, color: scheme.onTertiaryContainer),
                 )),
@@ -245,11 +279,11 @@ class _AppRoutingPageState extends State<AppRoutingPage>
           children: [
             Icon(Icons.public, size: 48, color: subtext.withOpacity(0.35)),
             const SizedBox(height: 12),
-            Text('Весь трафик идёт через VPN',
+              Text(AppLocalization().t('apps_routing_all_proxy'),
                 style: TextStyle(fontSize: 15, color: text,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('Выберите другой режим для настройки\nмаршрутизации по приложениям',
+              Text(AppLocalization().t('apps_routing_all_proxy_hint'),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: subtext)),
           ],
@@ -276,18 +310,18 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                 color: primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
-              tabs: const [
+              tabs: [
                 Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.apps, size: 14),
-                      SizedBox(width: 5),
-                      Text('Установленные', style: TextStyle(fontSize: 12)),
+                      const Icon(Icons.apps, size: 14),
+                      const SizedBox(width: 5),
+                      Text(AppLocalization().t('apps_tab_installed'), style: const TextStyle(fontSize: 12)),
                     ])),
                 Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.play_circle_outline, size: 14),
-                      SizedBox(width: 5),
-                      Text('Запущенные', style: TextStyle(fontSize: 12)),
+                      const Icon(Icons.play_circle_outline, size: 14),
+                      const SizedBox(width: 5),
+                      Text(AppLocalization().t('apps_tab_running'), style: const TextStyle(fontSize: 12)),
                     ])),
               ],
             ),
@@ -309,7 +343,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                 onChanged: _onSearch,
                 style: TextStyle(fontSize: 13, color: text),
                 decoration: InputDecoration(
-                  hintText: 'Поиск...',
+                  hintText: AppLocalization().t('apps_search_hint'),
                   hintStyle: TextStyle(
                       color: subtext.withOpacity(0.7), fontSize: 13),
                   prefixIcon: Icon(Icons.search, size: 16,
@@ -344,11 +378,11 @@ class _AppRoutingPageState extends State<AppRoutingPage>
               ),
               const SizedBox(width: 5),
             ],
-            _iconBtn(Icons.refresh, 'Обновить',
+            _iconBtn(Icons.refresh, AppLocalization().t('apps_refresh'),
                 _isLoading ? null : _loadCurrent, subtext),
             if (_vpnApps.isNotEmpty) ...[
               const SizedBox(width: 4),
-              _iconBtn(Icons.clear_all, 'Снять все',
+              _iconBtn(Icons.clear_all, AppLocalization().t('apps_clear_all'),
                   _clearAll, Colors.redAccent.withOpacity(0.75)),
             ],
           ]),
@@ -357,7 +391,8 @@ class _AppRoutingPageState extends State<AppRoutingPage>
         const SizedBox(height: 4),
         Expanded(child: _buildContent(primary, accent)),
       ],
-    ]);
+    ]),
+    );
   }
 
   Widget _iconBtn(IconData icon, String tip, VoidCallback? fn, Color color) =>
@@ -388,8 +423,8 @@ class _AppRoutingPageState extends State<AppRoutingPage>
         const SizedBox(height: 10),
         Text(
             _tabController.index == 1
-                ? 'Получение запущенных процессов...'
-                : 'Загрузка приложений...',
+                ? AppLocalization().t('apps_loading_running')
+                : AppLocalization().t('apps_loading_installed'),
             style: TextStyle(
                 color: s.secondaryTextColor.withOpacity(0.8), fontSize: 12)),
       ]));
@@ -400,14 +435,14 @@ class _AppRoutingPageState extends State<AppRoutingPage>
         Icon(Icons.error_outline, size: 36,
             color: Colors.redAccent.withOpacity(0.5)),
         const SizedBox(height: 8),
-        Text('Не удалось загрузить список',
+        Text(AppLocalization().t('apps_load_failed'),
             style: TextStyle(
                 color: s.secondaryTextColor.withOpacity(0.9), fontSize: 13)),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: _loadCurrent,
           icon: const Icon(Icons.refresh, size: 14),
-          label: const Text('Повторить'),
+          label: Text(AppLocalization().t('apps_retry')),
           style: OutlinedButton.styleFrom(
             foregroundColor: primary,
             side: BorderSide(color: primary.withOpacity(0.4)),
@@ -419,15 +454,17 @@ class _AppRoutingPageState extends State<AppRoutingPage>
     if (_currentList.isEmpty) {
       return Center(child: Text(
           _tabController.index == 1
-              ? 'Нет запущенных приложений'
-              : 'Приложения не найдены',
+              ? AppLocalization().t('apps_no_running')
+              : AppLocalization().t('apps_not_found'),
           style: TextStyle(
               color: s.secondaryTextColor.withOpacity(0.8), fontSize: 13)));
     }
 
     if (_filtered.isEmpty) {
       return Center(child: Text(
-          'Ничего не найдено: "$_searchQuery"',
+          AppLocalization()
+              .t('apps_nothing_found')
+              .replaceFirst('{query}', _searchQuery),
           style: TextStyle(
               color: s.secondaryTextColor.withOpacity(0.8), fontSize: 13)));
     }
@@ -477,7 +514,7 @@ class _ReconnectBanner extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Настройки изменились',
+                AppLocalization().t('apps_settings_changed'),
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -485,7 +522,7 @@ class _ReconnectBanner extends StatelessWidget {
               ),
               const SizedBox(height: 1),
               Text(
-                'Для применения нужно переподключиться',
+                AppLocalization().t('apps_reconnect_required'),
                 style: TextStyle(
                     fontSize: 10, color: scheme.onTertiaryContainer.withOpacity(0.8)),
               ),
@@ -509,7 +546,7 @@ class _ReconnectBanner extends StatelessWidget {
                 Icon(Icons.refresh_rounded,
                     size: 13, color: scheme.tertiary),
                 const SizedBox(width: 4),
-                Text('Переподключить',
+                Text(AppLocalization().t('apps_reconnect'),
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -542,7 +579,7 @@ class _ModeSelector extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text('Режим маршрутизации',
+      Text(AppLocalization().t('apps_routing_mode_title'),
           style: TextStyle(fontSize: 11,
               color: ThemeManager().settings.secondaryTextColor.withOpacity(0.8),
               fontWeight: FontWeight.w500)),
@@ -593,13 +630,24 @@ class _ModeBtn extends StatelessWidget {
         Icon(_icon, size: 17,
             color: selected ? primary : ThemeManager().settings.secondaryTextColor),
         const SizedBox(height: 3),
-        Text(mode.label, textAlign: TextAlign.center,
+        Text(_label(context), textAlign: TextAlign.center,
             style: TextStyle(fontSize: 10,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 color: selected ? ThemeManager().settings.textColor : ThemeManager().settings.secondaryTextColor)),
       ]),
     ),
   );
+
+  String _label(BuildContext context) {
+    switch (mode) {
+      case AppRoutingMode.allProxy:
+        return context.tr('apps_routing_mode_all_proxy');
+      case AppRoutingMode.onlySelected:
+        return context.tr('apps_routing_mode_only_selected');
+      case AppRoutingMode.allExceptSelected:
+        return context.tr('apps_routing_mode_all_except_selected');
+    }
+  }
 }
 
 class _AppTile extends StatelessWidget {

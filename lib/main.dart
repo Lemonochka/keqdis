@@ -8,11 +8,14 @@ import 'storages/improved_settings_storage.dart';
 import 'screens/improved_theme_manager.dart';
 import 'utils/single_instance_manager.dart';
 import 'screens/UI/pages/home_screen_optimized.dart';
+import 'localization/app_localization.dart';
+import 'services/debug_log_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  DebugLogService().installDebugPrintHook();
 
   await UnifiedStorage.init();
 
@@ -28,15 +31,20 @@ void main() async {
 
   final settings = await SettingsStorage.loadSettings();
   await ThemeManager().loadTheme();
+  await AppLocalization().load();
 
-  final args = Platform.executableArguments;
-  final isAutoStarted = args.contains('--autostart') || args.contains('--minimized');
-  final isElevated = args.contains('--elevated');
+  final launchArgs = <String>{
+    ...args,
+    ...Platform.executableArguments,
+  };
+  final isAutoStarted =
+      launchArgs.contains('--autostart') || launchArgs.contains('--minimized');
+  final isElevated = launchArgs.contains('--elevated');
 
   // При автозапуске используем настройку или флаг аргумента
   final shouldStartMinimized = settings.startMinimized || isAutoStarted;
 
-  debugPrint('App started with args: $args');
+  debugPrint('App started with args: ${launchArgs.toList()}');
   debugPrint('Auto-started: $isAutoStarted, Elevated: $isElevated, StartMinimized: $shouldStartMinimized');
 
   WindowOptions windowOptions = WindowOptions(
@@ -60,6 +68,7 @@ void main() async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     if (shouldStartMinimized) {
       debugPrint('Starting minimized to tray');
+      await windowManager.setSkipTaskbar(true);
       await windowManager.hide();
       return;
     }
@@ -177,11 +186,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver, WindowListen
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: ThemeManager(),
+      animation: Listenable.merge([ThemeManager(), AppLocalization()]),
       builder: (context, child) {
         return MaterialApp(
           navigatorKey: navigatorKey,
           theme: ThemeManager().getThemeData(),
+          locale: AppLocalization().locale,
           debugShowCheckedModeBanner: false,
           home: HomeScreen(
             isAutoStarted: widget.isAutoStarted,

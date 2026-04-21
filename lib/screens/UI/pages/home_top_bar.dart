@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/screens/UI/controller/vpn_controller.dart';
+import 'package:keqdis/localization/app_localization.dart';
 
 class HomeTopBar extends StatelessWidget {
   final int currentTab;
@@ -49,7 +50,7 @@ class HomeTopBar extends StatelessWidget {
 
               _TabIconButton(
                 icon:       Icons.dns_rounded,
-                tooltip:    'Серверы',
+                tooltip:    context.tr('servers'),
                 tab:        0,
                 currentTab: currentTab,
                 settings:   s,
@@ -57,7 +58,7 @@ class HomeTopBar extends StatelessWidget {
               ),
               _TabIconButton(
                 icon:       Icons.language_rounded,
-                tooltip:    'Подписки',
+                tooltip:    context.tr('subscriptions'),
                 tab:        1,
                 currentTab: currentTab,
                 settings:   s,
@@ -65,7 +66,7 @@ class HomeTopBar extends StatelessWidget {
               ),
               _TabIconButton(
                 icon:       Icons.settings_rounded,
-                tooltip:    'Настройки',
+                tooltip:    context.tr('settings'),
                 tab:        2,
                 currentTab: currentTab,
                 settings:   s,
@@ -140,7 +141,6 @@ class _TabIconButtonState extends State<_TabIconButton>
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.settings;
     final scheme = Theme.of(context).colorScheme;
 
     return Tooltip(
@@ -254,10 +254,10 @@ class _ConnectionDotState extends State<_ConnectionDot>
 
     return Tooltip(
       message: widget.isConnected
-          ? 'Подключено'
+          ? context.tr('connected')
           : widget.isConnecting
-          ? 'Подключение...'
-          : 'Отключено',
+          ? context.tr('connecting')
+          : context.tr('disconnected'),
       child: AnimatedBuilder(
         animation: _pulse,
         builder: (_, __) => Transform.scale(

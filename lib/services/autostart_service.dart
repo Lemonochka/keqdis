@@ -6,6 +6,11 @@ import 'package:flutter/foundation.dart';
 class AutoStartService {
   static bool _isInitialized = false;
 
+  static bool _isUnsupported(Object e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('unsupported operation') || msg.contains('noop');
+  }
+
   static Future<void> initialize() async {
     if (_isInitialized) return;
 
@@ -56,6 +61,7 @@ class AutoStartService {
       debugPrint('AutoStart: Enabled');
     } catch (e, s) {
       debugPrint('AutoStart: Failed to enable: $e\n$s');
+      if (_isUnsupported(e)) return;
       throw Exception('Не удалось включить автозапуск: $e');
     }
   }
@@ -66,6 +72,7 @@ class AutoStartService {
       debugPrint('AutoStart: Disabled');
     } catch (e, s) {
       debugPrint('AutoStart: Failed to disable: $e\n$s');
+      if (_isUnsupported(e)) return;
       throw Exception('Не удалось отключить автозапуск: $e');
     }
   }

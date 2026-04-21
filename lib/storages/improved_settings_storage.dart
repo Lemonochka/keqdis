@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'unified_storage.dart';
+import '../utils/security_hardening.dart';
 
 class AppSettings {
   final int localPort;
@@ -15,6 +17,10 @@ class AppSettings {
   final String pingType;
   final bool autoConnectLastServer;
   final String lastVpnMode;
+  final String appLanguage;
+  final bool debugMode;
+  final bool shareDeviceHwid;
+  final String deviceHwid;
 
   AppSettings({
     this.localPort = 2080,
@@ -28,6 +34,10 @@ class AppSettings {
     this.pingType = 'tcp',
     this.autoConnectLastServer = false,
     this.lastVpnMode = 'systemProxy',
+    this.appLanguage = 'ru',
+    this.debugMode = false,
+    this.shareDeviceHwid = true,
+    this.deviceHwid = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -42,6 +52,10 @@ class AppSettings {
     'pingType': pingType,
     'autoConnectLastServer': autoConnectLastServer,
     'lastVpnMode': lastVpnMode,
+    'appLanguage': appLanguage,
+    'debugMode': debugMode,
+    'shareDeviceHwid': shareDeviceHwid,
+    'deviceHwid': deviceHwid,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -67,12 +81,19 @@ class AppSettings {
           : false,
       lastVpnMode:
       json['lastVpnMode'] is String ? json['lastVpnMode'] : 'systemProxy',
+      appLanguage: json['appLanguage'] is String ? json['appLanguage'] : 'ru',
+      debugMode: json['debugMode'] is bool ? json['debugMode'] : false,
+      shareDeviceHwid: json['shareDeviceHwid'] is bool
+          ? json['shareDeviceHwid']
+          : true,
+      deviceHwid: json['deviceHwid'] is String ? json['deviceHwid'] : '',
     );
   }
 }
 
 class SettingsStorage {
   static const String _settingsFile = 'settings.json';
+  static const String _serverGroupsStateFile = 'server_groups_state.json';
   static AppSettings? _cachedSettings;
 
   static Future<AppSettings> loadSettings() async {
@@ -89,7 +110,31 @@ class SettingsStorage {
         final content = await file.readAsString();
         if (content.isNotEmpty) {
           final decoded = Map<String, dynamic>.from(json.decode(content));
-          _cachedSettings = AppSettings.fromJson(decoded);
+          final parsed = AppSettings.fromJson(decoded);
+          final normalizedHwid = parsed.deviceHwid.trim();
+          if (normalizedHwid.isEmpty) {
+            final withHwid = AppSettings(
+              localPort: parsed.localPort,
+              directDomains: parsed.directDomains,
+              blockedDomains: parsed.blockedDomains,
+              directIps: parsed.directIps,
+              proxyDomains: parsed.proxyDomains,
+              autoStart: parsed.autoStart,
+              minimizeToTray: parsed.minimizeToTray,
+              startMinimized: parsed.startMinimized,
+              pingType: parsed.pingType,
+              autoConnectLastServer: parsed.autoConnectLastServer,
+              lastVpnMode: parsed.lastVpnMode,
+              appLanguage: parsed.appLanguage,
+              debugMode: parsed.debugMode,
+              shareDeviceHwid: parsed.shareDeviceHwid,
+              deviceHwid: _generateHwid(),
+            );
+            _cachedSettings = withHwid;
+            await saveSettings(withHwid);
+            return _cachedSettings!;
+          }
+          _cachedSettings = parsed;
           return _cachedSettings!;
         }
       }
@@ -97,18 +142,25 @@ class SettingsStorage {
       debugPrint('Failed to load settings: $e\n$s');
     }
 
-    _cachedSettings = AppSettings();
+    _cachedSettings = AppSettings(deviceHwid: _generateHwid());
     return _cachedSettings!;
+  }
+
+  static String _generateHwid() {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final random = Random.secure().nextInt(0x7fffffff);
+    final host = Platform.localHostname;
+    final seed = '$host-$now-$random';
+    return base64UrlEncode(utf8.encode(seed)).replaceAll('=', '');
   }
 
   static Future<void> saveSettings(AppSettings settings) async {
     try {
       await PortableStorage.getPortableDirectory();
       final filePath = PortableStorage.getFilePath(_settingsFile);
-      final file = File(filePath);
 
       final jsonString = json.encode(settings.toJson());
-      await file.writeAsString(jsonString);
+      await SecurityHardening.writeStringAtomically(filePath, jsonString);
       _cachedSettings = settings;
     } catch (e, s) {
       debugPrint('Failed to save settings: $e\n$s');
@@ -134,5 +186,35 @@ class SettingsStorage {
     } catch (e) {
       throw Exception('Некорректный формат настроек');
     }
+  }
+
+  static Future<Map<String, bool>> loadCollapsedServerGroups() async {
+    try {
+      await PortableStorage.getPortableDirectory();
+      final filePath = PortableStorage.getFilePath(_serverGroupsStateFile);
+      final file = File(filePath);
+      if (!await file.exists()) return const <String, bool>{};
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) return const <String, bool>{};
+      final decoded = Map<String, dynamic>.from(json.decode(raw));
+      final out = <String, bool>{};
+      for (final e in decoded.entries) {
+        if (e.value is bool) out[e.key] = e.value as bool;
+      }
+      return out;
+    } catch (_) {
+      return const <String, bool>{};
+    }
+  }
+
+  static Future<void> saveCollapsedServerGroups(Map<String, bool> state) async {
+    try {
+      await PortableStorage.getPortableDirectory();
+      final filePath = PortableStorage.getFilePath(_serverGroupsStateFile);
+      await SecurityHardening.writeStringAtomically(
+        filePath,
+        json.encode(state),
+      );
+    } catch (_) {}
   }
 }

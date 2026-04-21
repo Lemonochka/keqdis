@@ -129,6 +129,19 @@ class ServerNameUtils {
         .replaceAll(RegExp(r'[\u{1F1E6}-\u{1F1FF}]', unicode: true), '')
         .trim();
 
+    // Subscriptions may append usage/expiry info into names (e.g. "45.00GB", "6D,16H", "6д16ч", "🔁", "📊", "⏳").
+    // Keep the name readable by stripping such dynamic suffixes.
+    cleaned = cleaned
+        .replaceAll('🔁', '')
+        .replaceAll('📊', '')
+        .replaceAll('⏳', '')
+        .replaceAll(RegExp(r'\b\d+(?:\.\d+)?\s*(?:B|KB|MB|GB|TB)\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\b\d+\s*д\s*\d+\s*ч\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\b\d+\s*ч\s*\d+\s*м\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\b\d+\s*D,\s*\d+\s*H\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .trim();
+
     final regex = RegExp(r'^[A-Z]{2}\s+(.+)$');
     final match = regex.firstMatch(cleaned);
 

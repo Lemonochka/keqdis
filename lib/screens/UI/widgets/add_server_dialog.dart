@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/utils/config_validator.dart';
+import 'package:keqdis/localization/app_localization.dart';
 
 class AddServerDialog extends StatelessWidget {
   final Function(List<String>) onServersAdded;
@@ -50,7 +51,7 @@ class AddServerDialog extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Добавить серверы',
+                  context.tr('add_servers_title'),
                   style: TextStyle(
                     fontSize:   18,
                     fontWeight: FontWeight.w700,
@@ -78,7 +79,7 @@ class AddServerDialog extends StatelessWidget {
                 maxLines:   8,
                 style: TextStyle(color: s.textColor, fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'Вставьте один или несколько конфигов\n(каждый с новой строки)',
+                  hintText: context.tr('add_servers_hint'),
                   hintStyle: TextStyle(
                     color:    s.secondaryTextColor.withOpacity(0.55),
                     fontSize: 13,
@@ -101,7 +102,7 @@ class AddServerDialog extends StatelessWidget {
                   }
                 },
                 icon:  Icon(Icons.content_paste, size: 18),
-                label: const Text('Вставить из буфера'),
+                label: Text(context.tr('paste_from_clipboard')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: s.primaryColor,
                   side:            BorderSide(color: s.primaryColor.withOpacity(0.4)),
@@ -128,7 +129,7 @@ class AddServerDialog extends StatelessWidget {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('Отмена'),
+                    child: Text(context.tr('cancel')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -162,9 +163,9 @@ class AddServerDialog extends StatelessWidget {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text(
-                      'Добавить',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    child: Text(
+                      context.tr('dialog_add'),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),

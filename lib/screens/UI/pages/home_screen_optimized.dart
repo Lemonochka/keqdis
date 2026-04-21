@@ -14,6 +14,7 @@ import 'package:keqdis/core/tun_service.dart';
 import 'package:keqdis/utils/single_instance_manager.dart';
 
 import 'package:keqdis/screens/improved_theme_manager.dart';
+import 'package:keqdis/localization/app_localization.dart';
 import 'package:keqdis/screens/UI/controller/vpn_controller.dart';
 import 'package:keqdis/screens/ping_manager.dart';
 
@@ -52,9 +53,10 @@ class _HomeScreenState extends State<HomeScreen>
   final Map<String, bool> _serverPingingState = {};
 
   AppSettings _settings = AppSettings();
-  bool _tunAvailable      = false;
-  bool _isReallyExiting   = false;
-  bool _isInitialized     = false;
+  bool _tunAvailable = false;
+  bool _isReallyExiting = false;
+  bool _isInitialized = false;
+  bool _isWindowActive = true;
 
   Timer? _autoUpdateTimer;
 
@@ -67,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
 
     _vpnController = VpnController();
-    _pingManager   = PingManager();
+    _pingManager = PingManager();
     _themeManager.addListener(_onThemeChanged);
 
     windowManager.addListener(this);
@@ -86,24 +88,27 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initializeApp() async {
     try {
       // Сначала загружаем настройки и серверы
-      await Future.wait([
-        _vpnController.loadInitialServers(),
-        _loadSettings(),
-      ]);
+      await Future.wait([_vpnController.loadInitialServers(), _loadSettings()]);
 
       if (!mounted) return;
 
       await _checkTunAvailability();
       await _initializeTray();
+      await _applyLaunchMinimizedIfNeeded();
 
       _vpnController.addListener(_updateTrayStatus);
       _startSubscriptionAutoUpdate();
 
-      // Автоподключение только при автозапуске (старт Windows), а не при ручном перезапуске приложения.
-      if (widget.isAutoStarted && _settings.autoConnectLastServer) {
+      // Автоподключение должно работать при автозапуске и при старте в свернутом режиме.
+      final shouldAutoConnectOnLaunch =
+          widget.isAutoStarted || widget.startMinimized;
+      if (shouldAutoConnectOnLaunch && _settings.autoConnectLastServer) {
         // Если сохранён TUN, но приложение запущено без админ-прав, падаем на systemProxy.
-        if (_vpnController.vpnMode == VpnMode.tun && !await TunService.hasAdminRights()) {
-          debugPrint('Auto-connect: no admin rights for TUN, falling back to systemProxy');
+        if (_vpnController.vpnMode == VpnMode.tun &&
+            !await TunService.hasAdminRights()) {
+          debugPrint(
+            'Auto-connect: no admin rights for TUN, falling back to systemProxy',
+          );
           _vpnController.setVpnModeForSession(VpnMode.systemProxy);
         }
         debugPrint('Auto-connecting to last server (autostart only)...');
@@ -136,7 +141,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _updateCachedImage() {
     final newPath = _themeManager.settings.backgroundImagePath;
-    if (_currentBackgroundImagePath == newPath && _cachedBackgroundImageProvider != null) return;
+    if (_currentBackgroundImagePath == newPath &&
+        _cachedBackgroundImageProvider != null)
+      return;
     _currentBackgroundImagePath = newPath;
 
     if (newPath == null) {
@@ -147,14 +154,16 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final imageProvider = FileImage(File(newPath));
-    final mediaQuery    = MediaQuery.of(context);
-    final screenWidth   = (mediaQuery.size.width  * mediaQuery.devicePixelRatio).round();
-    final screenHeight  = (mediaQuery.size.height * mediaQuery.devicePixelRatio).round();
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio)
+        .round();
+    final screenHeight = (mediaQuery.size.height * mediaQuery.devicePixelRatio)
+        .round();
 
     setState(() {
       _cachedBackgroundImageProvider = ResizeImage(
         imageProvider,
-        width:  screenWidth,
+        width: screenWidth,
         height: screenHeight,
       );
     });
@@ -167,10 +176,25 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _initializeTray() async {
     await _trayService.initialize(
-      onShowCallback:   () async { await windowManager.show(); await windowManager.focus(); },
+      onShowCallback: () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
       onToggleCallback: () => _vpnController.toggleConnection(),
-      onExitCallback:   _exitApp,
+      onExitCallback: _exitApp,
     );
+  }
+
+  Future<void> _applyLaunchMinimizedIfNeeded() async {
+    final shouldHideOnLaunch = widget.isAutoStarted || widget.startMinimized;
+    if (!shouldHideOnLaunch) return;
+
+    // Windows can restore/show a window once during startup sequence.
+    // Re-apply hide with a short delay to reliably keep app in tray.
+    await windowManager.setSkipTaskbar(true);
+    await windowManager.hide();
+    await Future.delayed(const Duration(milliseconds: 250));
+    await windowManager.hide();
   }
 
   void _startSubscriptionAutoUpdate() {
@@ -223,6 +247,26 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
+  void onWindowBlur() {
+    if (mounted) setState(() => _isWindowActive = false);
+  }
+
+  @override
+  void onWindowFocus() {
+    if (mounted) setState(() => _isWindowActive = true);
+  }
+
+  @override
+  void onWindowMinimize() {
+    if (mounted) setState(() => _isWindowActive = false);
+  }
+
+  @override
+  void onWindowRestore() {
+    if (mounted) setState(() => _isWindowActive = true);
+  }
+
+  @override
   void onWindowClose() async {
     if (_isReallyExiting) {
       await windowManager.destroy();
@@ -244,42 +288,65 @@ class _HomeScreenState extends State<HomeScreen>
         child: Container(
           constraints: const BoxConstraints(maxWidth: 360),
           decoration: BoxDecoration(
-            color:        s.cardColor,
+            color: s.cardColor,
             borderRadius: BorderRadius.circular(20),
-            border:       Border.all(color: s.borderColor),
+            border: Border.all(color: s.borderColor),
           ),
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Выход', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: s.textColor)),
+              Text(
+                context.tr('exit'),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: s.textColor,
+                ),
+              ),
               const SizedBox(height: 12),
-              Text('Вы действительно хотите выйти?', style: TextStyle(color: s.secondaryTextColor)),
+              Text(
+                context.tr('confirm_exit'),
+                style: TextStyle(color: s.secondaryTextColor),
+              ),
               const SizedBox(height: 20),
-              Row(children: [
-                Expanded(child: OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: s.secondaryTextColor,
-                    side: BorderSide(color: s.borderColor),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: s.secondaryTextColor,
+                        side: BorderSide(color: s.borderColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text(context.tr('cancel')),
+                    ),
                   ),
-                  child: const Text('Отмена'),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: ElevatedButton(
-                  onPressed: () async { Navigator.pop(ctx); await _exitApp(); },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: s.primaryColor,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _exitApp();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: s.primaryColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text(context.tr('exit')),
+                    ),
                   ),
-                  child: const Text('Выйти'),
-                )),
-              ]),
+                ],
+              ),
             ],
           ),
         ),
@@ -304,17 +371,27 @@ class _HomeScreenState extends State<HomeScreen>
         await _vpnController.disconnect();
         _vpnController.switchVpnMode(newMode);
         await _vpnController.toggleConnection();
-        CustomNotification.show(context,
-            message: 'Режим изменён на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
-            type: NotificationType.success);
+        CustomNotification.show(
+          context,
+          message:
+              'Режим изменён на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
+          type: NotificationType.success,
+        );
       } catch (e) {
-        CustomNotification.show(context, message: 'Ошибка смены режима: $e', type: NotificationType.error);
+        CustomNotification.show(
+          context,
+          message: 'Ошибка смены режима: $e',
+          type: NotificationType.error,
+        );
       }
     } else {
       _vpnController.switchVpnMode(newMode);
-      CustomNotification.show(context,
-          message: 'Режим изменён на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
-          type: NotificationType.success);
+      CustomNotification.show(
+        context,
+        message:
+            'Режим изменён на ${newMode == VpnMode.tun ? 'TUN' : 'System Proxy'}',
+        type: NotificationType.success,
+      );
     }
   }
 
@@ -336,39 +413,66 @@ class _HomeScreenState extends State<HomeScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Icon(Icons.shield_outlined, color: s.primaryColor, size: 28),
-                const SizedBox(width: 12),
-                Expanded(child: Text('Требуются права администратора',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: s.textColor))),
-              ]),
+              Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: s.primaryColor, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      context.tr('admin_required'),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: s.textColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 14),
-              Text('Для TUN режима необходим перезапуск от имени администратора.',
-                  style: TextStyle(color: s.secondaryTextColor)),
+              Text(
+                context.tr('tun_requires_admin'),
+                style: TextStyle(color: s.secondaryTextColor),
+              ),
               const SizedBox(height: 20),
-              Row(children: [
-                Expanded(child: OutlinedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: s.secondaryTextColor, side: BorderSide(color: s.borderColor),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: s.secondaryTextColor,
+                        side: BorderSide(color: s.borderColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text(context.tr('cancel')),
+                    ),
                   ),
-                  child: const Text('Отмена'),
-                )),
-                const SizedBox(width: 12),
-                Expanded(child: ElevatedButton.icon(
-                  onPressed: () async { Navigator.pop(ctx); await _restartAsAdmin(); },
-                  icon:  const Icon(Icons.refresh, size: 18),
-                  label: const Text('Перезапустить'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: s.primaryColor, foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await _restartAsAdmin();
+                      },
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: Text(context.tr('restart')),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: s.primaryColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
-                )),
-              ]),
+                ],
+              ),
             ],
           ),
         ),
@@ -381,13 +485,25 @@ class _HomeScreenState extends State<HomeScreen>
       if (Platform.isWindows) {
         final success = await TunService.requestAdminRights();
         if (!success && mounted) {
-          CustomNotification.show(context, message: 'Не удалось перезапустить', type: NotificationType.error);
+          CustomNotification.show(
+            context,
+            message: 'Не удалось перезапустить',
+            type: NotificationType.error,
+          );
         }
       } else {
-        CustomNotification.show(context, message: 'Доступно только на Windows', type: NotificationType.error);
+        CustomNotification.show(
+          context,
+          message: 'Доступно только на Windows',
+          type: NotificationType.error,
+        );
       }
     } catch (e) {
-      CustomNotification.show(context, message: 'Ошибка: $e', type: NotificationType.error);
+      CustomNotification.show(
+        context,
+        message: 'Ошибка: $e',
+        type: NotificationType.error,
+      );
     }
   }
 
@@ -402,7 +518,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _pingAllServers(List<ServerItem> servers) async {
-    await _pingManager.pingMultipleServers(servers, _settings.pingType, (server, isComplete) {});
+    await _pingManager.pingMultipleServers(
+      servers,
+      _settings.pingType,
+      (server, isComplete) {},
+    );
   }
 
   void _showAddServerDialog() {
@@ -419,9 +539,11 @@ class _HomeScreenState extends State<HomeScreen>
               debugPrint('Ошибка добавления: $e');
             }
           }
-          CustomNotification.show(context,
-              message: 'Добавлено: $successCount из ${configs.length}',
-              type: NotificationType.success);
+          CustomNotification.show(
+            context,
+            message: 'Добавлено: $successCount из ${configs.length}',
+            type: NotificationType.success,
+          );
         },
       ),
     );
@@ -443,57 +565,94 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       backgroundColor: _themeManager.settings.backgroundColor,
       body: Center(
-        child: CircularProgressIndicator(color: _themeManager.settings.primaryColor),
+        child: CircularProgressIndicator(
+          color: _themeManager.settings.primaryColor,
+        ),
       ),
     );
   }
 
   Widget _buildMainContent() {
     final s = _themeManager.settings;
+    final desktopLayout = MediaQuery.of(context).size.width >= 1100;
 
     return Scaffold(
       backgroundColor: s.backgroundColor,
       body: Stack(
         children: [
           // ── Фоновое изображение (на весь экран) ───────────────────────
-          if (_themeManager.hasCustomBackground && _cachedBackgroundImageProvider != null)
+          if (_themeManager.hasCustomBackground &&
+              _cachedBackgroundImageProvider != null)
             Positioned.fill(child: _buildOptimizedBackground()),
 
-          // ── Основной контент: TopBar + Content ─────────────────────────
-          Column(
-            children: [
-              HomeTopBar(
-                currentTab:   _currentTab,
-                onTabChanged: (tab) => setState(() => _currentTab = tab),
-              ),
-              Expanded(
-                child: HomeMainContent(
-                  currentTab:          _currentTab,
-                  settings:            _settings,
-                  tunAvailable:        _tunAvailable,
-                  searchController:    _searchController,
-                  onSearchChanged:     _onSearchChanged,
-                  onClearSearch: () {
-                    _searchController.clear();
-                    _vpnController.searchServers('');
-                  },
-                  onAddServer:         _showAddServerDialog,
-                  onPingAll:           _pingAllServers,
-                  onPing:              _pingServer,
-                  serverPingingState:  _serverPingingState,
-                  onVpnModeChanged:    _handleVpnModeSwitch,
-                  onSettingsChanged:   _loadSettings,
+          // ── Основной контент: desktop shell / compact shell ────────────
+          if (desktopLayout)
+            Row(
+              children: [
+                _DesktopSidebar(
+                  currentTab: _currentTab,
+                  onTabChanged: (tab) => setState(() => _currentTab = tab),
                 ),
-              ),
-            ],
-          ),
+                Expanded(
+                  child: HomeMainContent(
+                    currentTab: _currentTab,
+                    settings: _settings,
+                    tunAvailable: _tunAvailable,
+                    searchController: _searchController,
+                    onSearchChanged: _onSearchChanged,
+                    onClearSearch: () {
+                      _searchController.clear();
+                      _vpnController.searchServers('');
+                    },
+                    onAddServer: _showAddServerDialog,
+                    onPingAll: _pingAllServers,
+                    onPing: _pingServer,
+                    serverPingingState: _serverPingingState,
+                    onVpnModeChanged: _handleVpnModeSwitch,
+                    onSettingsChanged: _loadSettings,
+                    enableWaveAnimation: _isWindowActive,
+                    isDesktopLayout: true,
+                  ),
+                ),
+              ],
+            )
+          else
+            Column(
+              children: [
+                HomeTopBar(
+                  currentTab: _currentTab,
+                  onTabChanged: (tab) => setState(() => _currentTab = tab),
+                ),
+                Expanded(
+                  child: HomeMainContent(
+                    currentTab: _currentTab,
+                    settings: _settings,
+                    tunAvailable: _tunAvailable,
+                    searchController: _searchController,
+                    onSearchChanged: _onSearchChanged,
+                    onClearSearch: () {
+                      _searchController.clear();
+                      _vpnController.searchServers('');
+                    },
+                    onAddServer: _showAddServerDialog,
+                    onPingAll: _pingAllServers,
+                    onPing: _pingServer,
+                    serverPingingState: _serverPingingState,
+                    onVpnModeChanged: _handleVpnModeSwitch,
+                    onSettingsChanged: _loadSettings,
+                    enableWaveAnimation: _isWindowActive,
+                    isDesktopLayout: false,
+                  ),
+                ),
+              ],
+            ),
 
           // ── Версия: плавающая карточка снизу по центру ─────────────────
           const Positioned(
             bottom: 14,
-            left:   0,
-            right:  0,
-            child:  _VersionBadge(),
+            left: 0,
+            right: 0,
+            child: _VersionBadge(),
           ),
         ],
       ),
@@ -506,7 +665,7 @@ class _HomeScreenState extends State<HomeScreen>
       children: [
         Image(
           image: _cachedBackgroundImageProvider!,
-          fit:   BoxFit.cover,   // ← заполняет весь экран включая где была панель
+          fit: BoxFit.cover, // ← заполняет весь экран включая где была панель
           errorBuilder: (context, error, _) {
             debugPrint('Ошибка загрузки фона: $error');
             Future.microtask(() => _themeManager.removeBackground());
@@ -529,6 +688,167 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
+class _DesktopSidebar extends StatelessWidget {
+  final int currentTab;
+  final ValueChanged<int> onTabChanged;
+
+  const _DesktopSidebar({required this.currentTab, required this.onTabChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ThemeManager().settings;
+    final items = <({int index, IconData icon, String label})>[
+      (index: 0, icon: Icons.dns_rounded, label: context.tr('servers')),
+      (
+        index: 1,
+        icon: Icons.language_rounded,
+        label: context.tr('subscriptions'),
+      ),
+      (index: 2, icon: Icons.settings_rounded, label: context.tr('settings')),
+    ];
+
+    return Container(
+      width: 232,
+      decoration: BoxDecoration(
+        color: s.cardColor.withOpacity(0.92),
+        border: Border(right: BorderSide(color: s.borderColor)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'KEQDIS',
+                style: TextStyle(
+                  color: s.textColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              for (final item in items) ...[
+                _DesktopNavTile(
+                  icon: item.icon,
+                  label: item.label,
+                  active: currentTab == item.index,
+                  onTap: () => onTabChanged(item.index),
+                ),
+                const SizedBox(height: 8),
+              ],
+              const Spacer(),
+              Consumer<VpnController>(
+                builder: (_, ctrl, __) {
+                  final status = ctrl.isConnecting
+                      ? context.tr('connecting')
+                      : ctrl.isConnected
+                      ? context.tr('connected')
+                      : context.tr('disconnected');
+                  final statusColor = ctrl.isConnecting
+                      ? Colors.orange
+                      : ctrl.isConnected
+                      ? Colors.green
+                      : s.secondaryTextColor;
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: s.searchBarColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: s.borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            status,
+                            style: TextStyle(
+                              color: s.textColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopNavTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _DesktopNavTile({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ThemeManager().settings;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: active ? s.primaryColor.withOpacity(0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active
+                ? s.primaryColor.withOpacity(0.4)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: active ? s.primaryColor : s.secondaryTextColor,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: active ? s.textColor : s.secondaryTextColor,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _VersionBadge extends StatefulWidget {
   const _VersionBadge();
 
@@ -540,18 +860,20 @@ class _VersionBadgeState extends State<_VersionBadge>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<Offset> _slide;
-  late Animation<double>  _fade;
+  late Animation<double> _fade;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-      vsync:    this,
+      vsync: this,
       duration: const Duration(milliseconds: 550),
     );
-    _slide = Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-    _fade  = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 1.5),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
 
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) _ctrl.forward();
@@ -582,17 +904,17 @@ class _VersionBadgeState extends State<_VersionBadge>
               border: Border.all(color: s.borderColor),
               boxShadow: [
                 BoxShadow(
-                  color:      Colors.black.withOpacity(0.18),
+                  color: Colors.black.withOpacity(0.18),
                   blurRadius: 16,
-                  offset:     const Offset(0, 4),
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: Text(
-              'v1.5.0',
+              'v0.0.1',
               style: TextStyle(
                 color: scheme.onSurfaceVariant.withOpacity(0.85),
-                fontSize:   11,
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.5,
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:keqdis/core/tun_service.dart';
 import 'package:keqdis/screens/improved_theme_manager.dart';
+import 'package:keqdis/localization/app_localization.dart';
 
 class VpnModeSwitch extends StatelessWidget {
   final VpnMode currentMode;
@@ -74,9 +75,9 @@ class _ModeButton extends StatelessWidget {
   });
 
   String get _tooltip {
-    if (needsAdmin)  return 'TUN режим (требуются права администратора)';
-    if (isConnected) return 'Отключитесь для смены режима';
-    return label == 'Proxy' ? 'System Proxy' : 'TUN режим';
+    if (needsAdmin)  return AppLocalization().t('vpn_tun_admin_required');
+    if (isConnected) return AppLocalization().t('vpn_disconnect_to_switch');
+    return label == 'Proxy' ? 'System Proxy' : 'TUN';
   }
 
   @override

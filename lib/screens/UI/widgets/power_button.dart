@@ -25,22 +25,23 @@ class _PowerButtonState extends State<PowerButton> {
     final themeManager = ThemeManager();
     const size = 140.0;
 
-    // Один пастельно-розовый цвет (без градиента) — затемняем при подключении
-    final isDark  = themeManager.settings.isDarkMode;
+    // Кнопка теперь следует активному цветовому пресету.
     final btnColor = widget.isConnected
         ? themeManager.settings.powerButtonColor.withOpacity(0.7)
         : themeManager.settings.powerButtonColor;
 
-    final glowColor   = themeManager.settings.powerButtonGlow;
-    final glowOpacity = _isHovered && !widget.isConnecting
-        ? (isDark ? 0.70 : 0.50)
-        : (isDark ? 0.50 : 0.35);
-    final glowRadius  = _isHovered && !widget.isConnecting ? 32.0 : 22.0;
-    final glowSpread  = _isHovered && !widget.isConnecting ? 8.0  : 4.0;
+    final glowColor = themeManager.settings.powerButtonGlow;
+    final glowOpacity = _isHovered && !widget.isConnecting ? 0.52 : 0.36;
+    final glowRadius = _isHovered && !widget.isConnecting ? 32.0 : 22.0;
+    final glowSpread = _isHovered && !widget.isConnecting ? 8.0 : 4.0;
 
     // Иконка: пауза когда подключено, питание когда нет
-    final iconData   = widget.isConnected ? Icons.pause : Icons.power_settings_new;
-    final iconColor  = isDark
+    final iconData = widget.isConnected
+        ? Icons.pause
+        : Icons.power_settings_new;
+    final iconShouldBeLight =
+        ThemeData.estimateBrightnessForColor(btnColor) == Brightness.dark;
+    final iconColor = iconShouldBeLight
         ? Colors.white.withOpacity(_isHovered ? 1.0 : 0.9)
         : Colors.black.withOpacity(_isHovered ? 0.75 : 0.6);
 
@@ -49,13 +50,13 @@ class _PowerButtonState extends State<PowerButton> {
           ? SystemMouseCursors.basic
           : SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
-      onExit:  (_) => setState(() => _isHovered = false),
+      onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.isConnecting ? null : widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
-          width:  size,
+          width: size,
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -63,33 +64,33 @@ class _PowerButtonState extends State<PowerButton> {
             boxShadow: [
               // Розовый glow (усиливается при hover и в dark-теме)
               BoxShadow(
-                color:       glowColor.withOpacity(glowOpacity),
-                blurRadius:  glowRadius,
+                color: glowColor.withOpacity(glowOpacity),
+                blurRadius: glowRadius,
                 spreadRadius: glowSpread,
               ),
               // Мягкая тень
               BoxShadow(
-                color:      Colors.black.withOpacity(isDark ? 0.45 : 0.15),
+                color: Colors.black.withOpacity(0.18),
                 blurRadius: 8,
-                offset:     const Offset(0, 4),
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Center(
             child: widget.isConnecting
                 ? CircularProgressIndicator(
-              color:      themeManager.settings.primaryColor,
-              strokeWidth: 3,
-            )
+                    color: themeManager.settings.primaryColor,
+                    strokeWidth: 3,
+                  )
                 : AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                iconData,
-                key:   ValueKey(iconData),
-                color: iconColor,
-                size:  52,
-              ),
-            ),
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      iconData,
+                      key: ValueKey(iconData),
+                      color: iconColor,
+                      size: 52,
+                    ),
+                  ),
           ),
         ),
       ),

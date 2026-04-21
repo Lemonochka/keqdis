@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'unified_storage.dart';
+import '../utils/security_hardening.dart';
 
 /// Режим маршрутизации приложений в TUN-режиме
 enum AppRoutingMode {
@@ -77,14 +78,16 @@ class AppRoutingStorage {
     try {
       await PortableStorage.getPortableDirectory();
       final filePath = PortableStorage.getFilePath(_fileName);
-      final file = File(filePath);
 
       final data = {
         'mode': _modeToString(mode),
         'apps': apps.toList()..sort(),
       };
 
-      await file.writeAsString(json.encode(data));
+      await SecurityHardening.writeStringAtomically(
+        filePath,
+        json.encode(data),
+      );
       _cachedApps = Set.from(apps);
       _cachedMode = mode;
       debugPrint('AppRoutingStorage: saved ${apps.length} apps, mode=${mode.name}');

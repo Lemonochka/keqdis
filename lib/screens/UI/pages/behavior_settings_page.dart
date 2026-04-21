@@ -5,6 +5,7 @@ import 'package:keqdis/screens/improved_theme_manager.dart';
 import 'package:keqdis/storages/improved_settings_storage.dart';
 import 'package:keqdis/services/autostart_service.dart';
 import 'package:keqdis/screens/UI/widgets/custom_notification.dart';
+import 'package:keqdis/localization/app_localization.dart';
 
 // Отдельный файл BehaviorSettingsPage (если используется отдельно от settings_screen.dart)
 class BehaviorSettingsPage extends StatefulWidget {
@@ -21,6 +22,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
   bool _minimizeToTray        = true;
   bool _startMinimized        = false;
   bool _autoConnectLastServer = false;
+  bool _shareDeviceHwid       = true;
   bool _isLoading             = true;
 
   @override
@@ -37,6 +39,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
         _minimizeToTray        = settings.minimizeToTray;
         _startMinimized        = settings.startMinimized;
         _autoConnectLastServer = settings.autoConnectLastServer;
+        _shareDeviceHwid       = settings.shareDeviceHwid;
         _isLoading             = false;
       });
     }
@@ -56,6 +59,10 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
       minimizeToTray:        _minimizeToTray,
       startMinimized:        _startMinimized,
       autoConnectLastServer: _autoConnectLastServer,
+      shareDeviceHwid:       _shareDeviceHwid,
+      deviceHwid:            cur.deviceHwid,
+      appLanguage:           cur.appLanguage,
+      debugMode:             cur.debugMode,
     );
 
     await SettingsStorage.saveSettings(settings);
@@ -67,7 +74,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
       if (mounted) {
         CustomNotification.show(
           context,
-          message: 'Не удалось настроить автозапуск: $e',
+          message: AppLocalization().t('behavior_autostart_error').replaceFirst('{error}', '$e'),
           type:    NotificationType.error,
         );
         return;
@@ -79,7 +86,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
     if (mounted) {
       CustomNotification.show(
         context,
-        message: 'Настройки сохранены',
+        message: AppLocalization().t('behavior_saved'),
         type:    NotificationType.success,
       );
     }
@@ -100,13 +107,15 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
           Column(
             children: [
               AppBar(
-                backgroundColor:  s.sidebarColor,
+                backgroundColor:  s.isGlassmorphism
+                    ? (s.isDarkMode ? const Color(0xFF141010) : const Color(0xFFF5E6EA))
+                    : s.sidebarColor,
                 foregroundColor:  s.textColor,
                 elevation:        0,
                 surfaceTintColor: Colors.transparent,
                 iconTheme:        IconThemeData(color: s.primaryColor),
                 title: Text(
-                  'Поведение приложения',
+                  context.tr('behavior_page_title'),
                   style: TextStyle(
                     color:      s.textColor,
                     fontWeight: FontWeight.w600,
@@ -121,32 +130,40 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
                   padding: const EdgeInsets.all(20),
                   children: [
                     _SwitchCard(
-                      title:    'Автозапуск при старте',
-                      subtitle: 'Приложение будет запускаться вместе с системой',
+                      title:    context.tr('autostart'),
+                      subtitle: context.tr('behavior_autostart_subtitle'),
                       value:    _autoStart,
                       settings: s,
                       onChanged: (v) { setState(() => _autoStart = v); _saveSettings(); },
                     ),
                     const SizedBox(height: 10),
                     _SwitchCard(
-                      title:    'Сворачивать в трей',
-                      subtitle: 'При закрытии окна сворачивать в системный трей',
+                      title:    context.tr('minimize_to_tray'),
+                      subtitle: context.tr('behavior_minimize_to_tray_subtitle'),
                       value:    _minimizeToTray,
                       settings: s,
                       onChanged: (v) { setState(() => _minimizeToTray = v); _saveSettings(); },
                     ),
                     const SizedBox(height: 10),
                     _SwitchCard(
-                      title:    'Запускать свёрнутым',
-                      subtitle: 'Запускать приложение свёрнутым в трей',
+                      title:    context.tr('start_minimized'),
+                      subtitle: context.tr('behavior_start_minimized_subtitle'),
                       value:    _startMinimized,
                       settings: s,
                       onChanged: (v) { setState(() => _startMinimized = v); _saveSettings(); },
                     ),
                     const SizedBox(height: 10),
                     _SwitchCard(
-                      title:    'Автоподключение',
-                      subtitle: 'Подключаться к последнему серверу при старте',
+                      title:    context.tr('share_device_hwid'),
+                      subtitle: context.tr('share_device_hwid_subtitle'),
+                      value:    _shareDeviceHwid,
+                      settings: s,
+                      onChanged: (v) { setState(() => _shareDeviceHwid = v); _saveSettings(); },
+                    ),
+                    const SizedBox(height: 10),
+                    _SwitchCard(
+                      title:    context.tr('autoconnect'),
+                      subtitle: context.tr('behavior_autoconnect_subtitle'),
                       value:    _autoConnectLastServer,
                       settings: s,
                       onChanged: (v) { setState(() => _autoConnectLastServer = v); _saveSettings(); },

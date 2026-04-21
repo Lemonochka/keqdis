@@ -55,7 +55,7 @@ class VpnController extends ChangeNotifier {
   Future<void> _loadInitialSettings() async {
     final settings = await SettingsStorage.loadSettings();
     _vpnMode = VpnMode.values.firstWhere(
-          (e) => e.name == settings.lastVpnMode,
+      (e) => e.name == settings.lastVpnMode,
       orElse: () => VpnMode.systemProxy,
     );
     debugPrint('VpnController: Loaded VPN mode: ${_vpnMode.name}');
@@ -63,14 +63,47 @@ class VpnController extends ChangeNotifier {
   }
 
   Future<void> loadInitialServers() async {
+    final prevSelected = _selectedServer;
     _allServers = await UnifiedStorage.getServers();
     _sortServers();
     _favoriteServers = _allServers.where((s) => s.isFavorite).toList();
+
     final lastServerId = await UnifiedStorage.loadLastServerId();
+    ServerItem? restored;
     if (lastServerId != null) {
-      final potentialServers = _allServers.where((s) => s.id == lastServerId);
-      _selectedServer = potentialServers.isNotEmpty ? potentialServers.first : null;
+      final byId = _allServers.where((s) => s.id == lastServerId);
+      if (byId.isNotEmpty) {
+        restored = byId.first;
+      }
     }
+
+    // During subscription refresh server IDs are recreated, so restore by stable data.
+    if (restored == null && prevSelected != null) {
+      final byConfig = _allServers.where(
+        (s) => s.config == prevSelected.config,
+      );
+      if (byConfig.isNotEmpty) {
+        restored = byConfig.first;
+      }
+    }
+
+    if (restored == null && prevSelected != null) {
+      final byName = _allServers.where(
+        (s) =>
+            s.displayName == prevSelected.displayName &&
+            s.subscriptionId == prevSelected.subscriptionId,
+      );
+      if (byName.isNotEmpty) {
+        restored = byName.first;
+      }
+    }
+
+    _selectedServer = restored;
+
+    if (restored != null) {
+      await UnifiedStorage.saveLastServer(restored.id);
+    }
+
     _searchResults = [];
     debugPrint('VpnController: Loaded ${_allServers.length} servers');
     notifyListeners();
@@ -102,13 +135,17 @@ class VpnController extends ChangeNotifier {
       return a.displayName.compareTo(b.displayName);
     });
 
-    debugPrint('VpnController: Search found ${_searchResults.length} servers for "$query"');
+    debugPrint(
+      'VpnController: Search found ${_searchResults.length} servers for "$query"',
+    );
     notifyListeners();
   }
 
   void selectServer(ServerItem server) {
     if (_isConnecting || _isConnected) {
-      debugPrint('VpnController: Cannot select server while connecting or connected');
+      debugPrint(
+        'VpnController: Cannot select server while connecting or connected',
+      );
       return;
     }
 
@@ -120,23 +157,31 @@ class VpnController extends ChangeNotifier {
   Future<void> switchVpnMode(VpnMode newMode) async {
     if (_vpnMode == newMode) return;
 
-    debugPrint('VpnController: Switching VPN mode from ${_vpnMode.name} to ${newMode.name}');
+    debugPrint(
+      'VpnController: Switching VPN mode from ${_vpnMode.name} to ${newMode.name}',
+    );
     _vpnMode = newMode;
 
     final settings = await SettingsStorage.loadSettings();
-    await SettingsStorage.saveSettings(AppSettings(
-      localPort: settings.localPort,
-      directDomains: settings.directDomains,
-      blockedDomains: settings.blockedDomains,
-      directIps: settings.directIps,
-      proxyDomains: settings.proxyDomains,
-      autoStart: settings.autoStart,
-      minimizeToTray: settings.minimizeToTray,
-      startMinimized: settings.startMinimized,
-      pingType: settings.pingType,
-      autoConnectLastServer: settings.autoConnectLastServer,
-      lastVpnMode: newMode.name,
-    ));
+    await SettingsStorage.saveSettings(
+      AppSettings(
+        localPort: settings.localPort,
+        directDomains: settings.directDomains,
+        blockedDomains: settings.blockedDomains,
+        directIps: settings.directIps,
+        proxyDomains: settings.proxyDomains,
+        autoStart: settings.autoStart,
+        minimizeToTray: settings.minimizeToTray,
+        startMinimized: settings.startMinimized,
+        pingType: settings.pingType,
+        autoConnectLastServer: settings.autoConnectLastServer,
+        lastVpnMode: newMode.name,
+        appLanguage: settings.appLanguage,
+        debugMode: settings.debugMode,
+        shareDeviceHwid: settings.shareDeviceHwid,
+        deviceHwid: settings.deviceHwid,
+      ),
+    );
 
     notifyListeners();
 
@@ -173,7 +218,9 @@ class VpnController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('VpnController: Connecting to ${serverToConnect.displayName} in ${_vpnMode.name} mode');
+      debugPrint(
+        'VpnController: Connecting to ${serverToConnect.displayName} in ${_vpnMode.name} mode',
+      );
 
       await _coreManager.start(serverToConnect.config, mode: _vpnMode);
 
@@ -237,10 +284,14 @@ class VpnController extends ChangeNotifier {
     }
 
     final potentialServers = _allServers.where((s) => s.id == lastServerId);
-    final ServerItem? lastServer = potentialServers.isNotEmpty ? potentialServers.first : null;
+    final ServerItem? lastServer = potentialServers.isNotEmpty
+        ? potentialServers.first
+        : null;
 
     if (lastServer != null) {
-      debugPrint('VpnController: Auto-connecting to last server: ${lastServer.displayName}');
+      debugPrint(
+        'VpnController: Auto-connecting to last server: ${lastServer.displayName}',
+      );
       selectServer(lastServer);
       await connect();
     } else {
@@ -298,7 +349,6 @@ class VpnController extends ChangeNotifier {
   void dispose() {
     debugPrint('VpnController: Disposing...');
     _coreManager.removeListener(_onCoreStatusChanged);
-
 
     super.dispose();
   }
