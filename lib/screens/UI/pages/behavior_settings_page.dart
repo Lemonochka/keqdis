@@ -49,6 +49,8 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
     final cur = await SettingsStorage.loadSettings();
     final settings = AppSettings(
       localPort:             cur.localPort,
+      useCustomDns:         cur.useCustomDns,
+      customDnsServers:     cur.customDnsServers,
       directDomains:         cur.directDomains,
       blockedDomains:        cur.blockedDomains,
       directIps:             cur.directIps,
@@ -108,7 +110,7 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
             children: [
               AppBar(
                 backgroundColor:  s.isGlassmorphism
-                    ? (s.isDarkMode ? const Color(0xFF141010) : const Color(0xFFF5E6EA))
+                    ? (s.isDark ? const Color(0xFF141010) : const Color(0xFFF5E6EA))
                     : s.sidebarColor,
                 foregroundColor:  s.textColor,
                 elevation:        0,
