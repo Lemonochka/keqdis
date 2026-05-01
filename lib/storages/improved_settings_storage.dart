@@ -7,6 +7,8 @@ import '../utils/security_hardening.dart';
 
 class AppSettings {
   final int localPort;
+  final bool useCustomDns;
+  final String customDnsServers;
   final String directDomains;
   final String blockedDomains;
   final String directIps;
@@ -24,6 +26,8 @@ class AppSettings {
 
   AppSettings({
     this.localPort = 2080,
+    this.useCustomDns = false,
+    this.customDnsServers = '1.1.1.1, 8.8.8.8',
     this.directDomains = 'ru, yandex.ru, vk.com',
     this.blockedDomains = '',
     this.directIps = '192.168.0.0/16, 10.0.0.0/8, 127.0.0.0/8',
@@ -42,6 +46,8 @@ class AppSettings {
 
   Map<String, dynamic> toJson() => {
     'localPort': localPort,
+    'useCustomDns': useCustomDns,
+    'customDnsServers': customDnsServers,
     'directDomains': directDomains,
     'blockedDomains': blockedDomains,
     'directIps': directIps,
@@ -61,6 +67,10 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
       localPort: json['localPort'] is int ? json['localPort'] : 2080,
+      useCustomDns: json['useCustomDns'] is bool ? json['useCustomDns'] : false,
+      customDnsServers: json['customDnsServers'] is String
+          ? json['customDnsServers']
+          : '1.1.1.1, 8.8.8.8',
       directDomains: json['directDomains'] is String
           ? json['directDomains']
           : 'yandex.ru, vk.com',
@@ -115,6 +125,8 @@ class SettingsStorage {
           if (normalizedHwid.isEmpty) {
             final withHwid = AppSettings(
               localPort: parsed.localPort,
+              useCustomDns: parsed.useCustomDns,
+              customDnsServers: parsed.customDnsServers,
               directDomains: parsed.directDomains,
               blockedDomains: parsed.blockedDomains,
               directIps: parsed.directIps,
