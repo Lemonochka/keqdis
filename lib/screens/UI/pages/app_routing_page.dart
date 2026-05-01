@@ -40,6 +40,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
 
   Timer? _saveDebounce;
   final _searchCtrl = TextEditingController();
+  final _manualExeCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -55,6 +56,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
     _tabController.dispose();
     _saveDebounce?.cancel();
     _searchCtrl.dispose();
+    _manualExeCtrl.dispose();
     super.dispose();
   }
 
@@ -149,6 +151,55 @@ class _AppRoutingPageState extends State<AppRoutingPage>
   Future<void> _save() =>
       AppRoutingStorage.save(apps: _vpnApps, mode: _routingMode);
 
+  String _normalizeManualExe(String input) {
+    var value = input.trim();
+    if (value.isEmpty) return '';
+    value = value.replaceAll('/', '\\');
+    if (value.contains('\\')) {
+      final parts = value.split('\\').where((p) => p.isNotEmpty).toList();
+      if (parts.isNotEmpty) value = parts.last;
+    }
+    return value;
+  }
+
+  Future<void> _addManualExe() async {
+    final normalized = _normalizeManualExe(_manualExeCtrl.text);
+    if (normalized.isEmpty) {
+      CustomNotification.show(
+        context,
+        message: 'Введите имя процесса, например chrome.exe',
+        type: NotificationType.error,
+      );
+      return;
+    }
+
+    final isValid = RegExp(r'^[A-Za-z0-9._\- ]+(\.exe)?$').hasMatch(normalized);
+    if (!isValid) {
+      CustomNotification.show(
+        context,
+        message: 'Неверный формат процесса: $normalized',
+        type: NotificationType.error,
+      );
+      return;
+    }
+
+    setState(() {
+      _vpnApps.add(normalized);
+      _manualExeCtrl.clear();
+      if (widget.isVpnConnected) _pendingRestart = true;
+      _filtered = _buildDisplayList(_currentList, _searchQuery);
+    });
+
+    await _save();
+    if (mounted) {
+      CustomNotification.show(
+        context,
+        message: 'Добавлен процесс: $normalized',
+        type: NotificationType.success,
+      );
+    }
+  }
+
   void _toggle(InstalledApp app) {
     final exe = app.executableName;
     setState(() {
@@ -228,170 +279,240 @@ class _AppRoutingPageState extends State<AppRoutingPage>
             ? s.cardColor.withOpacity(0.20)
             : Colors.transparent,
       ),
-      child: Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        child: _ModeSelector(current: _routingMode, onChanged: _setMode,
-            primary: primary, accent: accent),
-      ),
-
-      AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _pendingRestart && widget.isVpnConnected
-            ? _ReconnectBanner(
-          key: const ValueKey('reconnect'),
-          onReconnect: widget.onReconnectRequest != null
-              ? () {
-            setState(() => _pendingRestart = false);
-            widget.onReconnectRequest!();
-          }
-              : null,
-          onDismiss: () => setState(() => _pendingRestart = false),
-        )
-            : Container(
-          key: const ValueKey('tun-info'),
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: scheme.tertiaryContainer.withOpacity(0.35),
-            borderRadius: BorderRadius.circular(8),
-            border:
-            Border.all(color: scheme.tertiary.withOpacity(0.35)),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: _ModeSelector(
+              current: _routingMode,
+              onChanged: _setMode,
+              primary: primary,
+              accent: accent,
+            ),
           ),
-          child: Row(children: [
-            Icon(Icons.info_outline,
-                color: scheme.tertiary, size: 16),
-            const SizedBox(width: 8),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _pendingRestart && widget.isVpnConnected
+                ? _ReconnectBanner(
+                    key: const ValueKey('reconnect'),
+                    onReconnect: widget.onReconnectRequest != null
+                        ? () {
+                            setState(() => _pendingRestart = false);
+                            widget.onReconnectRequest!();
+                          }
+                        : null,
+                    onDismiss: () => setState(() => _pendingRestart = false),
+                  )
+                : Container(
+                    key: const ValueKey('tun-info'),
+                    margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: scheme.tertiaryContainer.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: scheme.tertiary.withOpacity(0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: scheme.tertiary, size: 15),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            AppLocalization().t('apps_routing_tun_only_banner'),
+                            style: TextStyle(fontSize: 11, color: scheme.onTertiaryContainer),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          if (_routingMode == AppRoutingMode.allProxy) ...[
             Expanded(
-                child: Text(
-                  AppLocalization().t('apps_routing_tun_only_banner'),
-                  style: TextStyle(
-                      fontSize: 11, color: scheme.onTertiaryContainer),
-                )),
-          ]),
-        ),
-      ),
-
-      if (_routingMode == AppRoutingMode.allProxy) ...[
-        Expanded(child: Center(child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.public, size: 48, color: subtext.withOpacity(0.35)),
-            const SizedBox(height: 12),
-              Text(AppLocalization().t('apps_routing_all_proxy'),
-                style: TextStyle(fontSize: 15, color: text,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-              Text(AppLocalization().t('apps_routing_all_proxy_hint'),
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: subtext)),
-          ],
-        ))),
-      ] else ...[
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: s.cardColor,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: s.borderColor),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              onTap: (_) => _loadCurrent(),
-              indicatorColor: primary,
-              indicatorWeight: 2,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: primary,
-              unselectedLabelColor: subtext,
-              dividerColor: Colors.transparent,
-              indicator: BoxDecoration(
-                color: primary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              tabs: [
-                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.apps, size: 14),
-                      const SizedBox(width: 5),
-                      Text(AppLocalization().t('apps_tab_installed'), style: const TextStyle(fontSize: 12)),
-                    ])),
-                Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.play_circle_outline, size: 14),
-                      const SizedBox(width: 5),
-                      Text(AppLocalization().t('apps_tab_running'), style: const TextStyle(fontSize: 12)),
-                    ])),
-              ],
-            ),
-          ),
-        ),
-
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 7, 16, 0),
-          child: Row(children: [
-            Expanded(child: Container(
-              height: 38,
-              decoration: BoxDecoration(
-                color: s.searchBarColor,
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: s.borderColor),
-              ),
-              child: TextField(
-                controller: _searchCtrl,
-                onChanged: _onSearch,
-                style: TextStyle(fontSize: 13, color: text),
-                decoration: InputDecoration(
-                  hintText: AppLocalization().t('apps_search_hint'),
-                  hintStyle: TextStyle(
-                      color: subtext.withOpacity(0.7), fontSize: 13),
-                  prefixIcon: Icon(Icons.search, size: 16,
-                      color: subtext.withOpacity(0.7)),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                      icon: Icon(Icons.close, size: 14,
-                          color: subtext.withOpacity(0.8)),
-                      onPressed: () { _searchCtrl.clear(); _onSearch(''); })
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.public, size: 44, color: subtext.withOpacity(0.35)),
+                    const SizedBox(height: 8),
+                    Text(
+                      AppLocalization().t('apps_routing_all_proxy'),
+                      style: TextStyle(fontSize: 15, color: text, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      AppLocalization().t('apps_routing_all_proxy_hint'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: subtext),
+                    ),
+                  ],
                 ),
               ),
-            )),
-            const SizedBox(width: 7),
-            if (_vpnApps.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+            ),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              child: Container(
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: primary.withOpacity(0.14),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: primary.withOpacity(0.28)),
+                  color: s.cardColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: s.borderColor),
                 ),
-                child: Row(children: [
-                  Icon(Icons.check_circle_outline, size: 13, color: primary),
-                  const SizedBox(width: 4),
-                  Text('${_vpnApps.length}', style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600,
-                      color: primary)),
-                ]),
-              ),
-              const SizedBox(width: 5),
-            ],
-            _iconBtn(Icons.refresh, AppLocalization().t('apps_refresh'),
-                _isLoading ? null : _loadCurrent, subtext),
-            if (_vpnApps.isNotEmpty) ...[
-              const SizedBox(width: 4),
-              _iconBtn(Icons.clear_all, AppLocalization().t('apps_clear_all'),
-                  _clearAll, Colors.redAccent.withOpacity(0.75)),
-            ],
-          ]),
-        ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 900;
+                    final manualInput = Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: s.searchBarColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: s.borderColor),
+                      ),
+                      child: TextField(
+                        controller: _manualExeCtrl,
+                        style: TextStyle(fontSize: 12, color: text),
+                        decoration: InputDecoration(
+                          hintText: 'Добавить exe: myapp.exe или C:\\...\\myapp.exe',
+                          hintStyle: TextStyle(color: subtext.withOpacity(0.7), fontSize: 12),
+                          prefixIcon: Icon(Icons.add_circle_outline, size: 15, color: subtext.withOpacity(0.8)),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                        ),
+                        onSubmitted: (_) => _addManualExe(),
+                      ),
+                    );
+                    final searchInput = Container(
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: s.searchBarColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: s.borderColor),
+                      ),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        onChanged: _onSearch,
+                        style: TextStyle(fontSize: 12, color: text),
+                        decoration: InputDecoration(
+                          hintText: AppLocalization().t('apps_search_hint'),
+                          hintStyle: TextStyle(color: subtext.withOpacity(0.7), fontSize: 12),
+                          prefixIcon: Icon(Icons.search, size: 15, color: subtext.withOpacity(0.7)),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(Icons.close, size: 13, color: subtext.withOpacity(0.8)),
+                                  onPressed: () {
+                                    _searchCtrl.clear();
+                                    _onSearch('');
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                        ),
+                      ),
+                    );
 
-        const SizedBox(height: 4),
-        Expanded(child: _buildContent(primary, accent)),
-      ],
-    ]),
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TabBar(
+                                controller: _tabController,
+                                onTap: (_) => _loadCurrent(),
+                                indicatorColor: primary,
+                                indicatorWeight: 2,
+                                indicatorSize: TabBarIndicatorSize.tab,
+                                labelColor: primary,
+                                unselectedLabelColor: subtext,
+                                dividerColor: Colors.transparent,
+                                indicator: BoxDecoration(
+                                  color: primary.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                tabs: [
+                                  Tab(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.apps, size: 13),
+                                        const SizedBox(width: 4),
+                                        Text(AppLocalization().t('apps_tab_installed'), style: const TextStyle(fontSize: 11.5)),
+                                      ],
+                                    ),
+                                  ),
+                                  Tab(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.play_circle_outline, size: 13),
+                                        const SizedBox(width: 4),
+                                        Text(AppLocalization().t('apps_tab_running'), style: const TextStyle(fontSize: 11.5)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            if (_vpnApps.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: primary.withOpacity(0.14),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: primary.withOpacity(0.28)),
+                                ),
+                                child: Text(
+                                  '${_vpnApps.length}',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primary),
+                                ),
+                              ),
+                            const SizedBox(width: 4),
+                            _iconBtn(Icons.refresh, AppLocalization().t('apps_refresh'), _isLoading ? null : _loadCurrent, subtext),
+                            if (_vpnApps.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              _iconBtn(Icons.clear_all, AppLocalization().t('apps_clear_all'), _clearAll, Colors.redAccent.withOpacity(0.75)),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 7),
+                        if (compact) ...[
+                          Row(
+                            children: [
+                              Expanded(child: manualInput),
+                              const SizedBox(width: 6),
+                              _iconBtn(Icons.playlist_add, 'Добавить процесс', _addManualExe, primary),
+                            ],
+                          ),
+                          const SizedBox(height: 7),
+                          searchInput,
+                        ] else ...[
+                          Row(
+                            children: [
+                              Expanded(flex: 5, child: manualInput),
+                              const SizedBox(width: 6),
+                              _iconBtn(Icons.playlist_add, 'Добавить процесс', _addManualExe, primary),
+                              const SizedBox(width: 6),
+                              Expanded(flex: 4, child: searchInput),
+                            ],
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _buildContent(primary, accent),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
