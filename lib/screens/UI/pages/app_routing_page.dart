@@ -351,51 +351,65 @@ class _AppRoutingPageState extends State<AppRoutingPage>
           ] else ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: s.cardColor,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: s.borderColor),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
+              child: LayoutBuilder(
+                builder: (context, constraints) {
                     final compact = constraints.maxWidth < 900;
                     final manualInput = Container(
-                      height: 36,
+                      height: 38,
+                      clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: s.searchBarColor,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: s.borderColor),
                       ),
                       child: TextField(
                         controller: _manualExeCtrl,
                         style: TextStyle(fontSize: 12, color: text),
+                        textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
                           hintText: 'Добавить exe: myapp.exe или C:\\...\\myapp.exe',
                           hintStyle: TextStyle(color: subtext.withOpacity(0.7), fontSize: 12),
                           prefixIcon: Icon(Icons.add_circle_outline, size: 15, color: subtext.withOpacity(0.8)),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          isDense: true,
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
                         ),
                         onSubmitted: (_) => _addManualExe(),
                       ),
                     );
                     final searchInput = Container(
-                      height: 36,
+                      height: 38,
+                      clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: s.searchBarColor,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: s.borderColor),
                       ),
                       child: TextField(
                         controller: _searchCtrl,
                         onChanged: _onSearch,
                         style: TextStyle(fontSize: 12, color: text),
+                        textAlignVertical: TextAlignVertical.center,
                         decoration: InputDecoration(
-                          hintText: AppLocalization().t('apps_search_hint'),
+                          hintText: context.tr('apps_search_hint'),
                           hintStyle: TextStyle(color: subtext.withOpacity(0.7), fontSize: 12),
                           prefixIcon: Icon(Icons.search, size: 15, color: subtext.withOpacity(0.7)),
+                          prefixIconConstraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
                                   icon: Icon(Icons.close, size: 13, color: subtext.withOpacity(0.8)),
@@ -405,8 +419,17 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                                   },
                                 )
                               : null,
+                          isDense: true,
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
                         ),
                       ),
                     );
@@ -436,7 +459,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                                       children: [
                                         const Icon(Icons.apps, size: 13),
                                         const SizedBox(width: 4),
-                                        Text(AppLocalization().t('apps_tab_installed'), style: const TextStyle(fontSize: 11.5)),
+                                        Text(context.tr('apps_tab_installed'), style: const TextStyle(fontSize: 11.5)),
                                       ],
                                     ),
                                   ),
@@ -446,7 +469,7 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                                       children: [
                                         const Icon(Icons.play_circle_outline, size: 13),
                                         const SizedBox(width: 4),
-                                        Text(AppLocalization().t('apps_tab_running'), style: const TextStyle(fontSize: 11.5)),
+                                        Text(context.tr('apps_tab_running'), style: const TextStyle(fontSize: 11.5)),
                                       ],
                                     ),
                                   ),
@@ -500,7 +523,6 @@ class _AppRoutingPageState extends State<AppRoutingPage>
                       ],
                     );
                   },
-                ),
               ),
             ),
             const SizedBox(height: 6),
