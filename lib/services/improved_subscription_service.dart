@@ -1022,6 +1022,23 @@ class SubscriptionService {
     return results.whereType<UpdateResult>().toList();
   }
 
+  static Future<List<UpdateResult>> updateDueSubscriptions({
+    Duration interval = const Duration(hours: 12),
+  }) async {
+    final dueSubscriptions = await getSubscriptionsDueForUpdate(
+      interval: interval,
+    );
+    if (dueSubscriptions.isEmpty) {
+      return <UpdateResult>[];
+    }
+
+    final results = <UpdateResult>[];
+    for (final subscription in dueSubscriptions) {
+      results.add(await updateSubscriptionServers(subscription));
+    }
+    return results;
+  }
+
   static Future<List<Subscription>> getSubscriptionsDueForUpdate({
     Duration interval = const Duration(hours: 12),
   }) async {

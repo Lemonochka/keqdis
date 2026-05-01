@@ -40,6 +40,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, WindowListener {
+  static const Duration _subscriptionAutoUpdateInterval = Duration(hours: 12);
+  static const Duration _subscriptionAutoUpdateCheckPeriod = Duration(
+    minutes: 15,
+  );
+
   final _trayService = TrayService();
   late final AppLifecycleListener _listener;
 
@@ -59,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isWindowActive = true;
 
   Timer? _autoUpdateTimer;
+  bool _isAutoUpdateRunning = false;
 
   // Image cache
   ImageProvider? _cachedBackgroundImageProvider;
@@ -88,7 +94,11 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initializeApp() async {
     try {
       // Сначала загружаем настройки и серверы
-      await Future.wait([_vpnController.loadInitialServers(), _loadSettings()]);
+      await Future.wait([
+        _vpnController.loadInitialServers(),
+        _loadSettings(),
+        SettingsStorage.loadCollapsedServerGroups(),
+      ]);
 
       if (!mounted) return;
 
@@ -198,19 +208,29 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _startSubscriptionAutoUpdate() {
-    _autoUpdateTimer = Timer.periodic(const Duration(hours: 12), (_) async {
-      try {
-        final due = await SubscriptionService.getSubscriptionsDueForUpdate(
-          interval: const Duration(hours: 12),
-        );
-        if (due.isNotEmpty) {
-          await SubscriptionService.updateAllSubscriptions();
-          await _vpnController.loadInitialServers();
-        }
-      } catch (e) {
-        debugPrint('Ошибка автообновления: $e');
-      }
+    _autoUpdateTimer?.cancel();
+    unawaited(_runSubscriptionAutoUpdateCheck());
+    _autoUpdateTimer = Timer.periodic(_subscriptionAutoUpdateCheckPeriod, (_) {
+      unawaited(_runSubscriptionAutoUpdateCheck());
     });
+  }
+
+  Future<void> _runSubscriptionAutoUpdateCheck() async {
+    if (_isAutoUpdateRunning || !mounted) return;
+    _isAutoUpdateRunning = true;
+    try {
+      final results = await SubscriptionService.updateDueSubscriptions(
+        interval: _subscriptionAutoUpdateInterval,
+      );
+      if (!mounted) return;
+      if (results.any((r) => r.success)) {
+        await _vpnController.loadInitialServers();
+      }
+    } catch (e) {
+      debugPrint('Ошибка автообновления: $e');
+    } finally {
+      _isAutoUpdateRunning = false;
+    }
   }
 
   @override

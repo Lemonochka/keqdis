@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -338,6 +339,7 @@ class _GroupedServerListState extends State<_GroupedServerList> {
   @override
   void initState() {
     super.initState();
+    _collapsedGroups = SettingsStorage.getCachedCollapsedServerGroups();
     _reloadSubscriptionMeta();
     _loadCollapsedGroups();
   }
@@ -364,6 +366,7 @@ class _GroupedServerListState extends State<_GroupedServerList> {
   Future<void> _loadCollapsedGroups() async {
     final state = await SettingsStorage.loadCollapsedServerGroups();
     if (!mounted) return;
+    if (mapEquals(_collapsedGroups, state)) return;
     setState(() {
       _collapsedGroups = state;
     });
@@ -410,6 +413,17 @@ class _GroupedServerListState extends State<_GroupedServerList> {
         .t('expiry_left_hours_minutes')
         .replaceFirst('{hours}', '${d.inHours}')
         .replaceFirst('{minutes}', '$mins');
+  }
+
+  double? _trafficProgressForSubscription(String? subscriptionId) {
+    if (subscriptionId == null) return null;
+    final sub = _subscriptionsById[subscriptionId];
+    if (sub == null || sub.trafficTotalBytes == null || sub.trafficTotalBytes! <= 0) {
+      return null;
+    }
+    final used =
+        (sub.trafficUploadBytes ?? 0) + (sub.trafficDownloadBytes ?? 0);
+    return (used / sub.trafficTotalBytes!.toDouble()).clamp(0.0, 1.0).toDouble();
   }
 
   String _formatBytes(int bytes) {
@@ -577,6 +591,7 @@ class _GroupedServerListState extends State<_GroupedServerList> {
           ? context.tr('manual_servers')
           : (_subscriptionsById[subId]?.name ?? servers.first.subscriptionName ?? '');
       final trafficText = _trafficLabelForSubscription(subId);
+      final trafficProgress = _trafficProgressForSubscription(subId);
       final expiryText = _expiryLabelForSubscription(subId);
       final canManage = subId != null;
       final bubbleChildren = <Widget>[
@@ -584,6 +599,7 @@ class _GroupedServerListState extends State<_GroupedServerList> {
           label: label,
           settings: widget.settings,
           trafficText: trafficText,
+          trafficProgress: trafficProgress,
           expiryText: expiryText,
           canManage: canManage,
           isRefreshing: canManage && _refreshingSubscriptions.contains(subId),
@@ -690,6 +706,7 @@ class _SubscriptionHeader extends StatelessWidget {
   final String label;
   final ThemeSettings settings;
   final String? trafficText;
+  final double? trafficProgress;
   final String? expiryText;
   final bool canManage;
   final bool isRefreshing;
@@ -704,6 +721,7 @@ class _SubscriptionHeader extends StatelessWidget {
     required this.label,
     required this.settings,
     required this.trafficText,
+    required this.trafficProgress,
     required this.expiryText,
     required this.canManage,
     required this.isRefreshing,
@@ -761,6 +779,21 @@ class _SubscriptionHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       color: settings.secondaryTextColor.withOpacity(0.65),
+                    ),
+                  ),
+                ],
+                if (trafficProgress != null) ...[
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      value: trafficProgress,
+                      backgroundColor:
+                          settings.secondaryTextColor.withOpacity(0.12),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        settings.primaryColor,
+                      ),
                     ),
                   ),
                 ],

@@ -269,20 +269,13 @@ class _PingBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.network_ping, size: 14, color: _color),
-        const SizedBox(width: 3),
-        Text(
-          _text,
-          style: TextStyle(
-            fontSize: 13,
-            color: _color,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+    return Text(
+      _text,
+      style: TextStyle(
+        fontSize: 13,
+        color: _color,
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 }

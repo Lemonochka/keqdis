@@ -105,6 +105,7 @@ class SettingsStorage {
   static const String _settingsFile = 'settings.json';
   static const String _serverGroupsStateFile = 'server_groups_state.json';
   static AppSettings? _cachedSettings;
+  static Map<String, bool>? _cachedCollapsedServerGroups;
 
   static Future<AppSettings> loadSettings() async {
     if (_cachedSettings != null) {
@@ -201,25 +202,37 @@ class SettingsStorage {
   }
 
   static Future<Map<String, bool>> loadCollapsedServerGroups() async {
+    if (_cachedCollapsedServerGroups != null) {
+      return Map<String, bool>.from(_cachedCollapsedServerGroups!);
+    }
     try {
       await PortableStorage.getPortableDirectory();
       final filePath = PortableStorage.getFilePath(_serverGroupsStateFile);
       final file = File(filePath);
-      if (!await file.exists()) return const <String, bool>{};
+      if (!await file.exists()) {
+        _cachedCollapsedServerGroups = const <String, bool>{};
+        return const <String, bool>{};
+      }
       final raw = await file.readAsString();
-      if (raw.trim().isEmpty) return const <String, bool>{};
+      if (raw.trim().isEmpty) {
+        _cachedCollapsedServerGroups = const <String, bool>{};
+        return const <String, bool>{};
+      }
       final decoded = Map<String, dynamic>.from(json.decode(raw));
       final out = <String, bool>{};
       for (final e in decoded.entries) {
         if (e.value is bool) out[e.key] = e.value as bool;
       }
+      _cachedCollapsedServerGroups = Map<String, bool>.from(out);
       return out;
     } catch (_) {
+      _cachedCollapsedServerGroups = const <String, bool>{};
       return const <String, bool>{};
     }
   }
 
   static Future<void> saveCollapsedServerGroups(Map<String, bool> state) async {
+    _cachedCollapsedServerGroups = Map<String, bool>.from(state);
     try {
       await PortableStorage.getPortableDirectory();
       final filePath = PortableStorage.getFilePath(_serverGroupsStateFile);
@@ -228,5 +241,12 @@ class SettingsStorage {
         json.encode(state),
       );
     } catch (_) {}
+  }
+
+  static Map<String, bool> getCachedCollapsedServerGroups() {
+    if (_cachedCollapsedServerGroups == null) {
+      return const <String, bool>{};
+    }
+    return Map<String, bool>.from(_cachedCollapsedServerGroups!);
   }
 }
