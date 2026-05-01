@@ -911,7 +911,7 @@ class _VersionBadgeState extends State<_VersionBadge>
               ],
             ),
             child: Text(
-              'v0.0.1',
+              'v0.0.3',
               style: TextStyle(
                 color: scheme.onSurfaceVariant.withOpacity(0.85),
                 fontSize: 11,
