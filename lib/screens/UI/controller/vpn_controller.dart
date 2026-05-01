@@ -166,6 +166,8 @@ class VpnController extends ChangeNotifier {
     await SettingsStorage.saveSettings(
       AppSettings(
         localPort: settings.localPort,
+        useCustomDns: settings.useCustomDns,
+        customDnsServers: settings.customDnsServers,
         directDomains: settings.directDomains,
         blockedDomains: settings.blockedDomains,
         directIps: settings.directIps,
