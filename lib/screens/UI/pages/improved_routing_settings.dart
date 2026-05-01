@@ -74,6 +74,12 @@ class _ImprovedRoutingSettingsPageState
       'x.com',
       'tiktok.com',
     ],
+    'Geosite: Россия': ['geosite:ru'],
+    'Geosite: Категория рекламы': ['geosite:category-ads-all'],
+    'Geosite: Telegram': ['geosite:telegram'],
+    'Geosite: YouTube': ['geosite:youtube'],
+    'Geosite: Discord': ['geosite:discord'],
+    'Geosite: Steam': ['geosite:steam'],
   };
 
   final Map<String, List<String>> _blockedPresets = {
@@ -96,6 +102,11 @@ class _ImprovedRoutingSettingsPageState
       '127.0.0.0/8',
     ],
     'Localhost': ['127.0.0.1/32', '::1/128'],
+    'GeoIP: Private': ['geoip:private'],
+    'GeoIP: Россия': ['geoip:ru'],
+    'GeoIP: Украина': ['geoip:ua'],
+    'GeoIP: Германия': ['geoip:de'],
+    'GeoIP: Польша': ['geoip:pl'],
   };
 
   @override
@@ -142,6 +153,8 @@ class _ImprovedRoutingSettingsPageState
     final currentSettings = await SettingsStorage.loadSettings();
     final settings = AppSettings(
       localPort: currentSettings.localPort,
+      useCustomDns: currentSettings.useCustomDns,
+      customDnsServers: currentSettings.customDnsServers,
       directDomains: _listToString(_directDomains),
       blockedDomains: _listToString(_blockedDomains),
       directIps: _listToString(_directIps),
@@ -200,11 +213,13 @@ class _ImprovedRoutingSettingsPageState
   }
 
   bool _isValidDomainOrIp(String value) {
-    if (value.contains(' ')) return false;
+    final v = value.trim();
+    if (v.isEmpty || v.contains(' ')) return false;
     if (value.startsWith('domain:') ||
         value.startsWith('full:') ||
         value.startsWith('regexp:') ||
-        value.startsWith('geosite:'))
+        value.startsWith('geosite:') ||
+        value.startsWith('geoip:'))
       return true;
     if (value.contains('/'))
       return RegExp(r'^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$').hasMatch(value);
@@ -736,6 +751,8 @@ class _ImprovedRoutingSettingsPageState
                 '• Поддомены: .google.com\n'
                 '• IP: 192.168.1.1\n'
                 '• CIDR: 192.168.0.0/16\n'
+                '• GeoIP: geoip:private, geoip:ru\n'
+                '• Geosite: geosite:netflix\n'
                 '• Точное: full:example.com\n'
                 '• Regex: regexp:.*\\.ads\\..*',
                 style: TextStyle(fontSize: 12, color: s.secondaryTextColor),
