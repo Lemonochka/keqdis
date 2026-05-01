@@ -377,38 +377,40 @@ class ConfigGeneratorV2 {
     } else if (networkType == 'xhttp') {
       final xhttpSettings = <String, dynamic>{
         'path': getParam('path', '/'),
-        'headers': {'Host': getParam('host', sni)},
       };
       final xhttpMode = getParam('mode', '');
       if (xhttpMode.isNotEmpty) {
         xhttpSettings['mode'] = xhttpMode;
       }
-      // XHTTP requires TLS
-      streamSettings['security'] = 'tls';
-      streamSettings['tlsSettings'] = {
-        'serverName': sni,
-        if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
-        if (pinnedCert.isNotEmpty) 'pinnedPeerCertSha256': pinnedCert,
-        'alpn': ['h2'],
-      };
+      // XHTTP requires TLS transport, but do not override REALITY.
+      if (security != 'reality') {
+        streamSettings['security'] = 'tls';
+        streamSettings['tlsSettings'] = {
+          'serverName': sni,
+          if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
+          if (pinnedCert.isNotEmpty) 'pinnedPeerCertSha256': pinnedCert,
+          'alpn': ['h2'],
+        };
+      }
       streamSettings['xhttpSettings'] = xhttpSettings;
     } else if (networkType == 'splithttp') {
       // SplitHTTP
       final splitHttpSettings = <String, dynamic>{
         'path': getParam('path', '/'),
-        'headers': {'Host': getParam('host', sni)},
       };
       final xhttpMode = getParam('mode', '');
       if (xhttpMode.isNotEmpty) {
         splitHttpSettings['mode'] = xhttpMode;
       }
-      streamSettings['security'] = 'tls';
-      streamSettings['tlsSettings'] = {
-        'serverName': sni,
-        if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
-        if (pinnedCert.isNotEmpty) 'pinnedPeerCertSha256': pinnedCert,
-        'alpn': ['h2'],
-      };
+      if (security != 'reality') {
+        streamSettings['security'] = 'tls';
+        streamSettings['tlsSettings'] = {
+          'serverName': sni,
+          if (fingerprint.isNotEmpty) 'fingerprint': fingerprint,
+          if (pinnedCert.isNotEmpty) 'pinnedPeerCertSha256': pinnedCert,
+          'alpn': ['h2'],
+        };
+      }
       streamSettings['splitHttpSettings'] = splitHttpSettings;
     } else if (networkType == 'httpupgrade') {
       streamSettings['httpupgradeSettings'] = {
