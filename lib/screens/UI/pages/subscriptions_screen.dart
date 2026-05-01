@@ -978,6 +978,25 @@ class _SubscriptionCard extends StatelessWidget {
                               ),
                             ],
                           ),
+                          if (sub.trafficTotalBytes != null &&
+                              sub.trafficTotalBytes! > 0) ...[
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                minHeight: 6,
+                                value: (((sub.trafficUploadBytes ?? 0) +
+                                            (sub.trafficDownloadBytes ?? 0)) /
+                                        sub.trafficTotalBytes!.toDouble())
+                                    .clamp(0.0, 1.0),
+                                backgroundColor:
+                                    s.secondaryTextColor.withOpacity(0.12),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  s.primaryColor,
+                                ),
+                              ),
+                            ),
+                          ],
                           if (sub.expiresAt != null) ...[
                             const SizedBox(height: 6),
                             Row(
