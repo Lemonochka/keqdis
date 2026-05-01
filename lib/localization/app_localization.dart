@@ -24,6 +24,11 @@ class AppLocalization extends ChangeNotifier {
       'color_theme_hint': 'Выберите пресет интерфейса',
       'local_port': 'Локальный порт',
       'local_port_hint': 'Например: 2080',
+      'use_custom_dns': 'Использовать свои DNS',
+      'use_custom_dns_subtitle':
+          'Применяется для system proxy и TUN режимов',
+      'custom_dns_hint':
+          'Через запятую: 1.1.1.1, 8.8.8.8 или https://dns.google/dns-query',
       'local_port_saved':
           'Локальный порт сохранён. Переподключитесь для применения.',
       'save': 'Сохранить',
@@ -260,6 +265,11 @@ class AppLocalization extends ChangeNotifier {
       'color_theme_hint': 'Choose an interface preset',
       'local_port': 'Local port',
       'local_port_hint': 'For example: 2080',
+      'use_custom_dns': 'Use custom DNS',
+      'use_custom_dns_subtitle':
+          'Applied for both system proxy and TUN modes',
+      'custom_dns_hint':
+          'Comma-separated: 1.1.1.1, 8.8.8.8 or https://dns.google/dns-query',
       'local_port_saved': 'Local port saved. Reconnect to apply.',
       'save': 'Save',
       'app_behavior': 'App behavior',
@@ -494,6 +504,8 @@ class AppLocalization extends ChangeNotifier {
     await SettingsStorage.saveSettings(
       AppSettings(
         localPort: cur.localPort,
+        useCustomDns: cur.useCustomDns,
+        customDnsServers: cur.customDnsServers,
         directDomains: cur.directDomains,
         blockedDomains: cur.blockedDomains,
         directIps: cur.directIps,
