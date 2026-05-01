@@ -148,7 +148,7 @@ class AppLocalization extends ChangeNotifier {
       'routing_help_formats_list':
           '• TLD: ru, com, net\n• Домен: google.com, yandex.ru\n• Поддомены: .google.com\n• IP: 192.168.1.1\n• CIDR: 192.168.0.0/16\n• Точное: full:example.com\n• Regex: regexp:.*\\\\.ads\\\\..*',
       'routing_help_hint':
-          'Для зоны \"ru\" вводите просто ru. Для всех поддоменов Google — .google.com',
+          'Указывайте правило в нужном формате: для зоны — ru, для домена — google.com, для всех поддоменов — .google.com.',
       'routing_help_close': 'Понятно',
       'domains_and_ips_tab': 'Домены и IP',
       'apps_tab': 'Приложения',
@@ -388,7 +388,7 @@ class AppLocalization extends ChangeNotifier {
       'routing_help_formats_list':
           '• TLD: ru, com, net\n• Domain: google.com, yandex.ru\n• Subdomains: .google.com\n• IP: 192.168.1.1\n• CIDR: 192.168.0.0/16\n• Exact: full:example.com\n• Regex: regexp:.*\\\\.ads\\\\..*',
       'routing_help_hint':
-          'For \"ru\" zone just enter ru. For all Google subdomains use .google.com',
+          'Use the matching format for each rule: zone — ru, domain — google.com, all subdomains — .google.com.',
       'routing_help_close': 'Got it',
       'domains_and_ips_tab': 'Domains and IPs',
       'apps_tab': 'Applications',
