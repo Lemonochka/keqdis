@@ -25,13 +25,19 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   late Future<AppSettings> _settingsFuture;
   final _portCtrl = TextEditingController();
+  final _dnsCtrl = TextEditingController();
   String _languageCode = 'ru';
+  bool _useCustomDns = false;
 
   @override
   void initState() {
     super.initState();
     _settingsFuture = SettingsStorage.loadSettings().then((s) {
-      if (mounted) _portCtrl.text = s.localPort.toString();
+      if (mounted) {
+        _portCtrl.text = s.localPort.toString();
+        _dnsCtrl.text = s.customDnsServers;
+        _useCustomDns = s.useCustomDns;
+      }
       _languageCode = s.appLanguage;
       return s;
     });
@@ -40,6 +46,7 @@ class _SettingsViewState extends State<SettingsView> {
   @override
   void dispose() {
     _portCtrl.dispose();
+    _dnsCtrl.dispose();
     super.dispose();
   }
 
@@ -48,6 +55,8 @@ class _SettingsViewState extends State<SettingsView> {
     await SettingsStorage.saveSettings(
       AppSettings(
         localPort: int.tryParse(_portCtrl.text) ?? 2080,
+        useCustomDns: _useCustomDns,
+        customDnsServers: _dnsCtrl.text.trim(),
         directDomains: cur.directDomains,
         blockedDomains: cur.blockedDomains,
         directIps: cur.directIps,
@@ -142,6 +151,36 @@ class _SettingsViewState extends State<SettingsView> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        context.tr('use_custom_dns'),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: s.textColor,
+                          fontSize: 13,
+                        ),
+                      ),
+                      subtitle: Text(
+                        context.tr('use_custom_dns_subtitle'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: s.secondaryTextColor,
+                        ),
+                      ),
+                      value: _useCustomDns,
+                      onChanged: (v) => setState(() => _useCustomDns = v),
+                      activeColor: s.primaryColor,
+                    ),
+                    if (_useCustomDns) ...[
+                      const SizedBox(height: 8),
+                      _ThemedTextField(
+                        controller: _dnsCtrl,
+                        hint: context.tr('custom_dns_hint'),
+                        settings: s,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -420,6 +459,8 @@ class _BehaviorSettingsPageState extends State<BehaviorSettingsPage> {
     await SettingsStorage.saveSettings(
       AppSettings(
         localPort: cur.localPort,
+        useCustomDns: cur.useCustomDns,
+        customDnsServers: cur.customDnsServers,
         directDomains: cur.directDomains,
         blockedDomains: cur.blockedDomains,
         directIps: cur.directIps,
@@ -605,6 +646,8 @@ class _PingSettingsPageState extends State<PingSettingsPage> {
     await SettingsStorage.saveSettings(
       AppSettings(
         localPort: cur.localPort,
+        useCustomDns: cur.useCustomDns,
+        customDnsServers: cur.customDnsServers,
         directDomains: cur.directDomains,
         blockedDomains: cur.blockedDomains,
         directIps: cur.directIps,
