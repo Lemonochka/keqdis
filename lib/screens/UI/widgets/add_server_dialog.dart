@@ -27,7 +27,7 @@ class AddServerDialog extends StatelessWidget {
           border:       Border.all(color: s.borderColor),
           boxShadow: [
             BoxShadow(
-              color:      Colors.black.withOpacity(s.isDarkMode ? 0.5 : 0.15),
+              color:      Color.fromRGBO(0, 0, 0, s.isDark ? 0.5 : 0.15),
               blurRadius: 30,
               offset:     const Offset(0, 10),
             ),
@@ -44,7 +44,7 @@ class AddServerDialog extends StatelessWidget {
                 Container(
                   padding:    const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color:        s.primaryColor.withOpacity(0.15),
+                    color:        s.primaryColor.withAlpha((0.15 * 255).round()),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.add_link, color: s.primaryColor, size: 22),
@@ -81,7 +81,7 @@ class AddServerDialog extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: context.tr('add_servers_hint'),
                   hintStyle: TextStyle(
-                    color:    s.secondaryTextColor.withOpacity(0.55),
+                    color:    s.secondaryTextColor.withAlpha((0.55 * 255).round()),
                     fontSize: 13,
                   ),
                   border:          InputBorder.none,
@@ -105,7 +105,7 @@ class AddServerDialog extends StatelessWidget {
                 label: Text(context.tr('paste_from_clipboard')),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: s.primaryColor,
-                  side:            BorderSide(color: s.primaryColor.withOpacity(0.4)),
+                  side:            BorderSide(color: s.primaryColor.withAlpha((0.4 * 255).round())),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

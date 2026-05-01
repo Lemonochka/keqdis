@@ -87,7 +87,7 @@ class _ModeButton extends StatelessWidget {
     final textColor = needsAdmin
         ? s.secondaryTextColor.withOpacity(0.4)
         : active
-        ? (s.isDarkMode ? Colors.white : const Color(0xFF2D2D2D))
+        ? (s.isDark ? Colors.white : const Color(0xFF2D2D2D))
         : s.secondaryTextColor;
 
     return Tooltip(

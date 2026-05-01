@@ -200,7 +200,7 @@ class ServerListItem extends StatelessWidget {
               ? const []
               : [
                   BoxShadow(
-                    color: Colors.black.withOpacity(s.isDarkMode ? 0.15 : 0.05),
+                    color: Colors.black.withOpacity(s.isDark ? 0.15 : 0.05),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
@@ -344,7 +344,7 @@ class _CountryFlagAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final countryCode = ServerNameUtils.extractCountryCode(displayName);
-    final isDark = ThemeManager().settings.isDarkMode;
+    final isDark = ThemeManager().settings.isDark;
 
     return Container(
       width: 44,

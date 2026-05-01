@@ -662,7 +662,7 @@ class _GroupDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = settings.borderColor.withOpacity(settings.isDarkMode ? 0.28 : 0.36);
+    final c = settings.borderColor.withOpacity(settings.isDark ? 0.28 : 0.36);
     return Padding(
       // Align divider with text block (after flag + spacing).
       padding: const EdgeInsets.fromLTRB(70, 0, 12, 0),
