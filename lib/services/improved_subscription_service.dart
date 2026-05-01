@@ -391,18 +391,29 @@ class SubscriptionService {
             'Subscription contains only service links. Provider asks to enable/bind HWID for this client.',
           );
         }
+
+        final directLinks = _extractUriLinks(candidate);
+        if (directLinks.isNotEmpty) {
+          return directLinks;
+        }
+
+        final jsonLinks = _tryExtractProxyLinksFromJson(candidate);
+        if (jsonLinks.isNotEmpty) {
+          return jsonLinks;
+        }
+
         final lines = LineSplitter.split(candidate)
             .map((line) => line.trim())
-            .where((line) => line.isNotEmpty);
-        final buffered = lines.toList();
+            .where((line) => line.isNotEmpty)
+            .toList();
         final hasOnlyMetadataLinks =
-            buffered.isNotEmpty &&
-            buffered.every((l) => !_isValidServerConfig(l) || _isMetadataConfig(l));
-        final hasHwidGateMarkers = buffered.any(_isHwidGateConfig);
+            lines.isNotEmpty &&
+            lines.every((l) => !_isValidServerConfig(l) || _isMetadataConfig(l));
+        final hasHwidGateMarkers = lines.any(_isHwidGateConfig);
 
         final servers = <String>[];
         int lineCount = 0;
-        for (final line in buffered) {
+        for (final line in lines) {
           lineCount++;
           if (lineCount > _maxSubscriptionLines) {
             throw const FormatException('Слишком много строк в подписке');
@@ -412,6 +423,13 @@ class SubscriptionService {
           }
           if (_isValidServerConfig(line) && !_isMetadataConfig(line)) {
             servers.add(line);
+            continue;
+          }
+          final inlineLinks = _extractUriLinks(line);
+          for (final link in inlineLinks) {
+            if (!_isMetadataConfig(link)) {
+              servers.add(link);
+            }
           }
         }
         if (servers.isNotEmpty) {
@@ -434,7 +452,7 @@ class SubscriptionService {
         throw FormatException(unsupported);
       }
       throw const FormatException(
-        'No supported proxy links found. Expected URI lines like vless://, vmess://, trojan://, ss://, ssr://',
+        'No supported proxy links found. Expected URI lines like vless://, vmess://, trojan://, ss://, ssr://, hysteria://, hy2://',
       );
     } on FormatException catch (e) {
       throw FormatException('Не удалось распознать содержимое подписки: ${e.message}');
@@ -581,6 +599,8 @@ class SubscriptionService {
         if (cleaned.isEmpty) continue;
         final directLinks = _extractUriLinks(cleaned);
         if (directLinks.isNotEmpty) return directLinks;
+        final jsonLinks = _tryExtractProxyLinksFromJson(variant);
+        if (jsonLinks.isNotEmpty) return jsonLinks;
         try {
           final parsed = _parseSubscriptionContent(cleaned);
           if (parsed.isNotEmpty) return parsed;
@@ -701,7 +721,7 @@ class SubscriptionService {
 
   static List<String> _extractUriLinks(String text) {
     final matches = RegExp(
-      r'''(?:vless|vmess|trojan|ss|ssr)://[^\s<>"']+''',
+      r'''(?:vless|vmess|trojan|ss|hysteria|hy2)://[^\s<>"']+''',
       caseSensitive: false,
     ).allMatches(text);
     final links = <String>[];
@@ -719,12 +739,53 @@ class SubscriptionService {
     return links.toSet().toList();
   }
 
+  static List<String> _tryExtractProxyLinksFromJson(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return const [];
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return const [];
+    }
+    try {
+      final decoded = jsonDecode(trimmed);
+      return _extractProxyLinksFromJsonValue(decoded);
+    } on Object {
+      return const [];
+    }
+  }
+
+  static List<String> _extractProxyLinksFromJsonValue(dynamic node) {
+    final links = <String>{};
+    if (node is String) {
+      final directLinks = _extractUriLinks(node);
+      if (directLinks.isNotEmpty) links.addAll(directLinks);
+      final decoded = _tryDecodeBase64Flexible(node);
+      if (decoded != null && decoded.trim().isNotEmpty) {
+        links.addAll(_extractUriLinks(decoded));
+      }
+      return links.toList();
+    }
+    if (node is List) {
+      for (final item in node) {
+        links.addAll(_extractProxyLinksFromJsonValue(item));
+      }
+      return links.toList();
+    }
+    if (node is Map) {
+      for (final value in node.values) {
+        links.addAll(_extractProxyLinksFromJsonValue(value));
+      }
+      return links.toList();
+    }
+    return const [];
+  }
+
   static bool _isValidServerConfig(String config) {
     return config.startsWith('vless://') ||
         config.startsWith('vmess://') ||
         config.startsWith('trojan://') ||
         config.startsWith('ss://') ||
-        config.startsWith('ssr://');
+        config.startsWith('hysteria://') ||
+        config.startsWith('hy2://');
   }
 
   static bool _isMetadataConfig(String raw) {
