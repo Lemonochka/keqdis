@@ -67,6 +67,7 @@ class ThemeSettings {
   double backgroundOpacity;
   double blurIntensity;
   bool isDarkMode;
+  bool isDark;
   String presetId;
 
   ThemeSettings({
@@ -83,6 +84,7 @@ class ThemeSettings {
     this.backgroundOpacity = 0.3,
     this.blurIntensity = 10.0,
     this.isDarkMode = false,
+    this.isDark = false,
     this.presetId = 'ocean',
   }) : primaryColor = primaryColor ?? _AppColors.lightPrimary,
        secondaryColor = secondaryColor ?? _AppColors.lightSecondary,
@@ -169,6 +171,7 @@ class ThemeSettings {
     'backgroundOpacity': backgroundOpacity,
     'blurIntensity': blurIntensity,
     'isDarkMode': isDarkMode,
+    'isDark': isDark,
     'presetId': presetId,
   };
 
@@ -205,6 +208,7 @@ class ThemeSettings {
       backgroundOpacity: (json['backgroundOpacity'] as num?)?.toDouble() ?? 0.3,
       blurIntensity: (json['blurIntensity'] as num?)?.toDouble() ?? 10.0,
       isDarkMode: false,
+      isDark: json['isDark'] as bool? ?? false,
       presetId: json['presetId'] as String? ?? 'ocean',
     );
   }
@@ -220,6 +224,7 @@ class ThemeManager extends ChangeNotifier {
   List<ThemePreset> get presets => _presets;
 
   static const List<ThemePreset> _presets = [
+    // Light themes
     ThemePreset(
       id: 'ocean',
       name: 'Ocean',
@@ -271,6 +276,59 @@ class ThemeManager extends ChangeNotifier {
       text: Color(0xFF111827),
       secondaryText: Color(0xFF4B5563),
       border: Color(0x554B5563),
+    ),
+    // Dark themes
+    ThemePreset(
+      id: 'ocean_dark',
+      name: 'Ocean Dark',
+      primary: Color(0xFF4A8FFF),
+      secondary: Color(0xFF2B6CF2),
+      accent: Color(0xFF1A2D4A),
+      background: Color(0xFF0F1B2D),
+      sidebar: Color(0xFF141F32),
+      navIndicator: Color(0xFF1E2D45),
+      text: Color(0xFFE8F0FF),
+      secondaryText: Color(0xFF8BA4CC),
+      border: Color(0x404A8FFF),
+    ),
+    ThemePreset(
+      id: 'forest_dark',
+      name: 'Forest Dark',
+      primary: Color(0xFF4CAF6A),
+      secondary: Color(0xFF2E8B57),
+      accent: Color(0xFF1A2D1F),
+      background: Color(0xFF0F1F14),
+      sidebar: Color(0xFF142418),
+      navIndicator: Color(0xFF1A2D1E),
+      text: Color(0xFFE8F5EC),
+      secondaryText: Color(0xFF8BCC9E),
+      border: Color(0x404CAF6A),
+    ),
+    ThemePreset(
+      id: 'violet_dark',
+      name: 'Violet Dark',
+      primary: Color(0xFF9B6FFF),
+      secondary: Color(0xFF7A3FE2),
+      accent: Color(0xFF2A1A44),
+      background: Color(0xFF1A0F2D),
+      sidebar: Color(0xFF1F142E),
+      navIndicator: Color(0xFF251A3A),
+      text: Color(0xFFEEDFFF),
+      secondaryText: Color(0xFFAA8FCC),
+      border: Color(0x409B6FFF),
+    ),
+    ThemePreset(
+      id: 'mono_dark',
+      name: 'Mono Dark',
+      primary: Color(0xFF6B7280),
+      secondary: Color(0xFF4B5563),
+      accent: Color(0xFF1F2328),
+      background: Color(0xFF111827),
+      sidebar: Color(0xFF141A22),
+      navIndicator: Color(0xFF1A2028),
+      text: Color(0xFFE5E7EB),
+      secondaryText: Color(0xFF9CA3AF),
+      border: Color(0x406B7280),
     ),
   ];
 
@@ -336,15 +394,46 @@ class ThemeManager extends ChangeNotifier {
   }
 
   Future<void> setDarkMode(bool isDark) async {
-    // Kept for backward compatibility with old UI parts.
+    _settings.isDark = isDark;
     _settings.isDarkMode = false;
+    
+    // Apply corresponding dark/light preset
+    final presetId = _settings.presetId;
+    String newPresetId;
+    if (isDark) {
+      // If already dark variant, keep it
+      if (presetId.endsWith('_dark')) {
+        newPresetId = presetId;
+      } else {
+        // Find corresponding dark variant
+        newPresetId = '${presetId}_dark';
+        final darkPreset = _presetById(newPresetId);
+        if (darkPreset == null) {
+          // No dark variant, use default dark
+          newPresetId = '${_presets.first.id}_dark';
+        }
+      }
+    } else {
+      // Remove _dark suffix to get light variant
+      if (presetId.endsWith('_dark')) {
+        newPresetId = presetId.substring(0, presetId.length - 5);
+      } else {
+        newPresetId = presetId;
+      }
+    }
+    
+    final preset = _presetById(newPresetId);
+    if (preset != null) {
+      _applyPresetToSettings(_settings, preset);
+    }
+    
     await saveTheme();
   }
 
-  void toggleDarkMode() => setDarkMode(!_settings.isDarkMode);
+  void toggleDarkMode() => setDarkMode(!_settings.isDark);
 
   ThemeData getThemeData() {
-    final brightness = Brightness.light;
+    final brightness = _settings.isDark ? Brightness.dark : Brightness.light;
 
     // When glassmorphism background is enabled, the "real" background is drawn
     // by the page, so the Scaffold should stay transparent.
@@ -562,6 +651,8 @@ class ThemeManager extends ChangeNotifier {
     final preset = _presetById(presetId);
     if (preset == null) return;
     _applyPresetToSettings(_settings, preset);
+    // Update isDark flag based on preset id
+    _settings.isDark = presetId.endsWith('_dark');
     if (save) {
       await saveTheme();
     } else {

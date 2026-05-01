@@ -19,16 +19,18 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   late ThemeManager _themeManager;
   double _opacity = 0.3;
   double _blur = 10.0;
+  bool _showDarkThemes = false;
 
   ImageProvider? _cachedBackgroundImage;
   String? _currentBackgroundPath;
 
-  @override
+    @override
   void initState() {
     super.initState();
     _themeManager = ThemeManager();
     _opacity = _themeManager.settings.backgroundOpacity;
     _blur = _themeManager.settings.blurIntensity;
+    _showDarkThemes = _themeManager.settings.isDark;
     _updateCachedImage();
   }
 
@@ -169,8 +171,8 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
       insetPadding: const EdgeInsets.all(40),
       child: ConstrainedBox(
         constraints: const BoxConstraints(
-          maxWidth: 600,
-          maxHeight: 700,
+          maxWidth: 700,
+          maxHeight: 800,
         ),
         child: _buildContent(),
       ),
@@ -190,9 +192,9 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
           Column(
             children: [
               AppBar(
-                backgroundColor: _themeManager.hasCustomBackground
-                    ? (s.isDarkMode ? const Color(0xFF141010) : const Color(0xFFF5E6EA))
-                    : null,
+                              backgroundColor: _themeManager.hasCustomBackground
+                                  ? (s.isDark ? const Color(0xFF141010) : const Color(0xFFF5E6EA))
+                                  : null,
                 surfaceTintColor: Colors.transparent,
                 foregroundColor: s.textColor,
                 title: Text(AppLocalization().t('theme_settings_title')),
@@ -384,6 +386,11 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
 
                     const SizedBox(height: 32),
 
+                    // Выбор темы
+                    _buildThemeSection(),
+
+                    const SizedBox(height: 32),
+
                     // Цвета
                     Text(
                       AppLocalization().t('color_scheme'),
@@ -453,21 +460,239 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
   }
 
   Widget _buildColorCard(String title, Color color, VoidCallback onTap) {
-    return Card(
-      child: ListTile(
-        title: Text(title),
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white24, width: 2),
+      return Card(
+        child: ListTile(
+          title: Text(title),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white24, width: 2),
+            ),
+          ),
+          trailing: const Icon(Icons.edit),
+          onTap: onTap,
+        ),
+      );
+    }
+
+    Widget _buildThemeSection() {
+      final presets = _themeManager.presets;
+      final lightPresets = presets.where((p) => !p.id.endsWith('_dark')).toList();
+      final darkPresets = presets.where((p) => p.id.endsWith('_dark')).toList();
+      final currentIsDark = _themeManager.settings.isDark;
+    
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                currentIsDark ? 'Dark Themes' : 'Light Themes',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: currentIsDark
+                      ? Colors.indigo.withOpacity(0.2)
+                      : Colors.amber.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: currentIsDark
+                        ? Colors.indigo.withOpacity(0.4)
+                        : Colors.amber.withOpacity(0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildThemeModeButton(
+                      icon: Icons.light_mode,
+                      label: 'Light',
+                      isSelected: !currentIsDark,
+                      onTap: () async {
+                        await _themeManager.setDarkMode(false);
+                        setState(() => _showDarkThemes = false);
+                        widget.onThemeChanged?.call();
+                      },
+                    ),
+                    _buildThemeModeButton(
+                      icon: Icons.dark_mode,
+                      label: 'Dark',
+                      isSelected: currentIsDark,
+                      onTap: () async {
+                        await _themeManager.setDarkMode(true);
+                        setState(() => _showDarkThemes = true);
+                        widget.onThemeChanged?.call();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: (_showDarkThemes ? darkPresets : lightPresets).map((preset) {
+              final isSelected = _themeManager.settings.presetId == preset.id;
+              return _buildThemePresetCard(preset, isSelected);
+            }).toList(),
+          ),
+        ],
+      );
+    }
+
+    Widget _buildThemeModeButton({
+      required IconData icon,
+      required String label,
+      required bool isSelected,
+      required VoidCallback onTap,
+    }) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? _themeManager.settings.primaryColor
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isSelected
+                      ? Colors.white
+                      : _themeManager.settings.secondaryTextColor,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected
+                        ? Colors.white
+                        : _themeManager.settings.textColor,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        trailing: const Icon(Icons.edit),
-        onTap: onTap,
-      ),
-    );
+      );
+    }
+
+    Widget _buildThemePresetCard(ThemePreset preset, bool isSelected) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () async {
+            await _themeManager.applyPreset(preset.id);
+            setState(() {
+              _showDarkThemes = preset.id.endsWith('_dark');
+            });
+            widget.onThemeChanged?.call();
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 100,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: preset.accent,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? _themeManager.settings.primaryColor
+                    : preset.border,
+                width: isSelected ? 2.5 : 1.5,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: _themeManager.settings.primaryColor.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        preset.primary,
+                        preset.secondary,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: preset.background.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      Center(
+                        child: Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: preset.accent,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  preset.name,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: preset.text,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (isSelected) ...[
+                  const SizedBox(height: 2),
+                  Icon(
+                    Icons.check_circle,
+                    size: 14,
+                    color: preset.primary,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
   }
-}
